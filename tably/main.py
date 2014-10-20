@@ -10,7 +10,7 @@ from . import gui
 
 
 class Table:
-    def __init__(self, filepath=None, xlsheetname="Sheet1", data=None, name=None):
+    def __init__(self, filepath=None, xlsheetname=None, data=None, name=None):
         if filepath:
             fieldtuples,rows = loader.from_file(filepath, xlsheetname=xlsheetname)
         elif data:
@@ -27,11 +27,8 @@ class Table:
         return "\n".join([ "Table instance: %s" % self.name,
                            "Width: %s" % self.width,
                            "Height: %s" % self.height,
-                           "Variables:",
-                           "\t"+"\n\t".join(self.fields),
-                           "Rows:",
-                           "\t"+"\n\t".join( [str(row)[:60]
-                                    for row in self.rows[:20]] ) ])
+                           str(self.fields)[:-1],
+                           str(self.rows) ])
 
     def __iter__(self):
         for row in self.rows:
@@ -39,9 +36,8 @@ class Table:
 
     def __getitem__(self, i):
         """
-        Get either a Column of data, 
-        or get a Row of data.
-        ...OR get a new subsetted table...
+        Get either one or more Columns of data, 
+        or get one or more Rows of data.
         """
         if isinstance(i, slice):
 
@@ -61,6 +57,19 @@ class Table:
 
             elif isinstance(i, (int,float)):
                 return self.rows[i]
+
+    def __setitem__(self, i, item):
+        """
+        Set either a Column of data, 
+        or set a Row of data.
+        """
+        if isinstance(i, slice): raise Exception("You can only set one table element at a time")
+
+        if isinstance(i, (str,unicode)):
+            self.fields[i] = item
+
+        elif isinstance(i, (int,float)):
+            self.rows[i] = item
 
     @property
     def width(self):
@@ -103,13 +112,16 @@ class Table:
 
     ###### LAYOUT #######
 
-    def sort(self, sortfields, direction="down"):
+    def sort_rows(self, sortfields, direction="down"):
         if direction == "down": reverse = False
         elif direction == "up": reverse = True
         else: raise Exception("direction must be either 'up' or 'down'")
         sortfieldindexes = [self.fields.index(field) for field in sortfields]
         self.rows = list(sorted(self.rows, key=operator.itemgetter(*sortfieldindexes), reverse=reverse))
         return self
+
+    def sort_fields(self, direction="right"):
+        self.fields.sort(direction)
 
     def transpose(self):
         "ie switch axes, ie each unique variable becomes a unique row"
@@ -162,41 +174,39 @@ class Table:
 
     ###### EDIT #######
 
-    def append(self, row):
-        self.rows.append(row)
+    def add_row(self, row):
+        pass
+    
+    def edit_row(self, **kwargs):
+        pass
 
-    def insert(self, row, index):
-        self.rows.insert(row, index)
+    def keep_rows(self, *rows):
+        pass
 
-    def replace(self, row, index):
-        self.rows.replace(row, index)
-
-    def delete(self, index):
-        del self.rows[index]
+    def drop_rows(self, *rows):
+        pass
 
     ###### FIELDS #######
 
-    def addfield(self, field):
-        self.fields.append(field)
-        for row in self.rows:
-            row.append(MISSING)
-
-    def insertfield(self, field, index):
+    def add_field(self, field):
         pass
 
-    def movefield(self, field, toindex):
+    def edit_field(self, **kwargs):
         pass
 
-    def renamefield(self, field, newname):
+    def move_field(self, field, toindex):
         pass
 
-    def keepfields(self, *fields):
+    def keep_fields(self, *fields):
         pass
 
-    def deletefields(self, *fields):
+    def drop_fields(self, *fields):
         pass
 
     ###### CLEAN #######
+
+    def convert_field(self, fieldname, dtype):
+        self.fields[fieldname].convert(dtype)
 
     def duplicates(self, duplicatefields):
         """
@@ -218,6 +228,12 @@ class Table:
         pass
 
     def recode(self, field, oldvalue, newvalue):
+        """
+        ...
+        """
+        pass
+
+    def recode_range(self, field, minvalue, maxvalue, newvalue):
         """
         ...
         """
@@ -519,7 +535,7 @@ class Table:
 def new():
     return Table()
 
-def load(filepath=None, xlsheetname="Sheet1", data=None, name=None):
+def load(filepath=None, xlsheetname=None, data=None, name=None):
     return Table(filepath, xlsheetname, data, name)
 
 def merge(*mergetables):

@@ -1,10 +1,10 @@
 import tably
 
 #data = tably.load(r"D:\My Files\GIS Data\(Easy Georeferencer)\TestingGrounds\(I.np.uts)\GTDinput.txt")
-data = tably.load(data=["f1 f2 f3 f4".split(),
-                        [1,"h","e",True],
-                        [2,"h","e",False],
-                        [3,"h","e",True]])
+data = tably.load(data=["f1 f2 f3 f4 f5".split(),
+                        [1,3,"h","e",True],
+                        [2,4,"h","e",False],
+                        [3,5,"h","e",True]])
 
 # print all fields/columns
 print ""
@@ -39,7 +39,22 @@ data.fields["f2"].value_labels = {"h":"dsf"}
 print data.rows
 
 # print entire table info
-#print data
+print data
+
+# math between field instances
+print data["f1"] + 4
+print data["f2"] * 10
+print data["f3"] + data["f4"]
+print data["f1":"f2"]
+print sum(data["f1":"f2"])/len(data["f1":"f2"]) # note, sum doesnt work on strings
+
+# load heavy tables
+heavy = tably.load(r"D:\My Files\GIS Data\(Easy Georeferencer)\TestingGrounds\(I.np.uts)\Latin2010.xlsx")
+print heavy
+print heavy["country":"prov"]
+print heavy["country"] + ", " + heavy["prov"]
+#for field in heavy["crountry":"city"]: print field
+#print heavy["nwoundus"]
 
 # FIX HOW COPY SELF
 #d2 = data.copy()

@@ -5,7 +5,7 @@ from fileformats import shapefile as pyshp
 from fileformats import PyDTA
 
 
-def from_file(filepath, delimiter=None, xlsheetname="Sheet1"):
+def from_file(filepath, delimiter=None, xlsheetname=None):
     # determine filetype
     if filepath.endswith(".txt"):
         filetype = "txt"
@@ -32,18 +32,19 @@ def from_file(filepath, delimiter=None, xlsheetname="Sheet1"):
             rows = csv.reader(fileobj, dialect)
         else:
             rows = csv.reader(fileobj, delimiter=delimiter)
-        rows = [[eachcell for eachcell in eachrow] for eachrow in rows]
+        rows = [eachrow for eachrow in rows]
         fieldtuples = [(varname,"",None,dict()) for varname in rows.pop(0)]
     elif filetype == "excel":
         workbook = xlrd.open_workbook(filepath)
-        excelobj = workbook.sheet_by_name(xlsheetname)
-        rows = [ [excelobj.cell_value(row, column) for column in range(excelobj.ncols)] for row in range(1, excelobj.nrows)]
-        fieldtuples = [ (excelobj.cell_value(0, column),"",None,dict()) for column in range(excelobj.ncols) ]
+        if not xlsheetname: excelobj = workbook.sheet_by_index(0)
+        else: excelobj = workbook.sheet_by_name(xlsheetname)
+        rows = [excelobj.row_values(rowi,0,excelobj.ncols) for rowi in xrange(1, excelobj.nrows)]
+        fieldtuples = [ (fieldname,"",None,dict()) for fieldname in excelobj.row_values(0,0,excelobj.ncols )]
     elif filetype == "dbf" or filetype == "shp":
         redirectpathtodbf = "/".join(filepath.split(".")[:-1])+".dbf"
         fileobj = open(redirectpathtodbf, 'rb')
         shapereader = pyshp.Reader(dbf=fileobj)
-        rows = [ [eachcell for eachcell in eachrecord] for eachrecord in shapereader.iterRecords()]
+        rows = [ eachrecord for eachrecord in shapereader.iterRecords()]
         fieldtuples = [(varname,"",vartype,dict()) for varname,vartype,_,_ in shapereader.fields[1:]]
         # maybe treat types according to column types
     elif filetype == "spss":

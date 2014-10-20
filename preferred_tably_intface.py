@@ -129,7 +129,7 @@ confltypes.value_labels = dict(1="antigov",2="antigov",3="progov",4="progov")
 confltypes.edit(name="ConflictType",
                 valuelabels=dict(1="antigov",2="antigov",3="progov",4="progov"))
 
-#opt2: functional oriented  
+#opt2: functional oriented
 somedata.edit_field("CnflType",
                     name="ConflictType",
                     value_labels=dict(1="antigov",
