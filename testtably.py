@@ -1,5 +1,6 @@
 import tably
 
+
 #data = tably.load(r"D:\My Files\GIS Data\(Easy Georeferencer)\TestingGrounds\(I.np.uts)\GTDinput.txt")
 data = tably.load(data=["f1 f2 f3 f4 f5".split(),
                         [1,3,"h","e",True],
@@ -49,12 +50,17 @@ print data["f1":"f2"]
 print sum(data["f1":"f2"])/len(data["f1":"f2"]) # note, sum doesnt work on strings
 
 # load heavy tables
-heavy = tably.load(r"D:\My Files\GIS Data\(Easy Georeferencer)\TestingGrounds\(I.np.uts)\Latin2010.xlsx")
+import time
+t = time.time()
+#tably.builder.CODEC = "latin"
+print tably.builder.CODEC
+heavy = tably.load(r"D:\My Files\GIS Data\(Easy Georeferencer)\TestingGrounds\(I.np.uts)\GTDinput.txt")
+print time.time() - t, "secs"
 print heavy
-print heavy["country":"prov"]
-print heavy["country"] + ", " + heavy["prov"]
+print heavy["country_txt":"provstate"]
+print heavy["country_txt"] + ", " + heavy["provstate"]
 #for field in heavy["crountry":"city"]: print field
-#print heavy["nwoundus"]
+print heavy["nkill"]
 
 # FIX HOW COPY SELF
 #d2 = data.copy()

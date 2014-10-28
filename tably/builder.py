@@ -8,11 +8,16 @@ import itertools
 
 # CLASSES
 
+CODEC = "utf8"
+
+
+
+
 def NameGen():
     suffix = 1
     while True:
         suffix += 1
-        name = "untitled" + str(suffix)
+        name = "untitled" + unicode(suffix)
         yield name
 
 NAMES = NameGen()
@@ -70,7 +75,7 @@ COLUMNTYPES_FORCE = dict([("datetime", datetime.datetime),
                     ("integer", forceint),
                     ("float", forcefloat),
                     ("boolean", bool),
-                    ("text", str),
+                    ("text", lambda x: unicode(x, CODEC) ),
                     ("flexi", lambda x: x)])
 
 
@@ -87,7 +92,7 @@ class Column:
         self.columnmapper = None
 
     def __str__(self):
-        uniqvalues = list(str(value)[:50] for value in sorted(set(self)))
+        uniqvalues = list(unicode(value)[:50] for value in sorted(set(self)))
         if len(uniqvalues) > 30:
             uniqvalues = uniqvalues[:30]
             uniqvalues.append("...")
@@ -288,12 +293,14 @@ class ColumnMapper:
                         if column.name == start:
                             start = self.columns.index(column)
                             break
+                    else: raise Exception("Could not find field name %s" %start)
                         
                 if stop_isfield:
                     for column in self.columns:
                         if column.name == stop:
                             stop = self.columns.index(column) + 1
                             break
+                    else: raise Exception("Could not find field name %s" %stop)
 
                 if start > stop: start,stop = stop,start
 
@@ -306,6 +313,7 @@ class ColumnMapper:
                     if column.name == i:
                         i = self.columns.index(column)
                         break
+                else: raise Exception("Could not find field name %s" %i)
                 col = self.columns[i]
 
             elif isinstance(i, (int,float)):
@@ -332,7 +340,7 @@ class Row:
         # MAYBE USE PRETTYTABLE FOR FORMATTING: https://code.google.com/p/prettytable/
         rowtuples = []
         for field,value in zip(self.columnmapper.columns, self):
-            value = str(value)
+            value = unicode(value)
             shortvalue = value[:50]
             if len(value) > 50:
                 shortvalue[-1] = "..."
@@ -394,7 +402,7 @@ class RowMapper:
             else: shortrow = [row[_i] for _i in xrange(len(row))]
             shortrow_shortvalues = []
             for value in shortrow:
-                value = str(value)
+                value = unicode(value)
                 shortvalue = value.center(10)
                 if len(value) > 10:
                     shortvalue = shortvalue[:7]
