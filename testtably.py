@@ -52,16 +52,22 @@ print sum(data["f1":"f2"])/len(data["f1":"f2"]) # note, sum doesnt work on strin
 # load heavy tables
 import time
 t = time.time()
-#tably.builder.CODEC = "latin"
-print tably.builder.CODEC
+tably.builder.CODEC = "latin"
 heavy = tably.load(r"D:\My Files\GIS Data\(Easy Georeferencer)\TestingGrounds\(I.np.uts)\GTDinput.txt")
 print time.time() - t, "secs"
 print heavy
 print heavy["country_txt":"provstate"]
 print heavy["country_txt"] + ", " + heavy["provstate"]
-#for field in heavy["crountry":"city"]: print field
+for field in heavy["country":"city"]: print field
 print heavy["nkill"]
 
+# test python builtins treating columns as lists
+print heavy[102] # unicode print problem, should be fixed, but only displays raw binary of special chars
+for row in heavy[-5:]: 
+    print row
+for pair in zip(heavy["country_txt"],heavy["nkill"]):
+    print pair
+    
 # FIX HOW COPY SELF
 #d2 = data.copy()
 #print data.join("a2_country", d2, "a2_country")

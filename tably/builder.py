@@ -31,6 +31,9 @@ class MissingValue:
     def __str__(self):
         return "<MissingValue>"
 
+    def __repr__(self):
+        return self.__str__()
+
 MISSING = MissingValue()
 
 
@@ -238,17 +241,17 @@ class Column:
             self.values[i] = newvalue
         self.type = dtype
 
-    def make_valuelabels_permanent(self):
-        if self.value_labels:
-            self.type = self.detect_type(self.value_labels.values())
-            self.values = [valuelabel for valuelabel in self]
-            self.value_labels = dict()
-
     def recode(self, oldval, newval):
         pass
 
     def recode_range(self, minval, maxval, newval):
         pass
+
+    def recode_as_valuelabels(self):
+        if self.value_labels:
+            self.type = self.detect_type(self.value_labels.values())
+            self.values = [valuelabel for valuelabel in self]
+            self.value_labels = dict()
 
     def edit(self, **kwargs):
         pass
@@ -304,6 +307,8 @@ class ColumnMapper:
 
                 if start > stop: start,stop = stop,start
 
+            if not step: step = 1
+            if stop > len(self): stop = len(self)
             columns = self.columns[start:stop:step]
             return ColumnMapper(columns)
 
@@ -343,10 +348,10 @@ class Row:
             value = unicode(value)
             shortvalue = value[:50]
             if len(value) > 50:
-                shortvalue[-1] = "..."
+                shortvalue = shortvalue[:-3] + "..."
             rowtuples.append((field.name,value))
         return "Row #%s:"%self.i + \
-               "\n  " + "\n  ".join(("%s: %s"%rowtuple for rowtuple in rowtuples)) + \
+               "\n  " + "\n  ".join(("%r: %r"%rowtuple for rowtuple in rowtuples)) + \
                "\n"
 
     def __iter__(self):
@@ -414,7 +419,7 @@ class RowMapper:
         if len(self) > 30:
             samplerows[-1] = ["."*10 for _ in xrange(5)]
         return "Rows:" + \
-               "\n  " + "\n  ".join(("[ %s ]" %" , ".join(row) for row in samplerows)) + \
+               "\n  " + "\n  ".join(("[ %r ]" %" , ".join(row) for row in samplerows)) + \
                "\n"
 
     def __iter__(self):
@@ -429,13 +434,10 @@ class RowMapper:
         # get one or more row instances
         if isinstance(i, slice):
             start, stop, step = i.start, i.stop, i.step
+            if not step: step = 1
+            if stop > len(self): stop = len(self)
             rows = [Row(self.columnmapper, _i) for _i in xrange(start,stop,step)]
-            columns = []
-            for col in self.columnmapper:
-                col.values = [col.values[row.i] for row in rows]
-                columns.append(col)
-            columnmapper = ColumnMapper(columns)
-            return RowMapper(columnmapper)
+            return rows
         else:
             return Row(self.columnmapper, i)
 
