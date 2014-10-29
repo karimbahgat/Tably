@@ -61,12 +61,19 @@ print heavy["country_txt"] + ", " + heavy["provstate"]
 for field in heavy["country":"city"]: print field
 print heavy["nkill"]
 
+# test sorting
+heavy.sort_rows("nkill")
+heavy.sort_fields()
+
 # test python builtins treating columns as lists
 print heavy[102] # unicode print problem, should be fixed, but only displays raw binary of special chars
 for row in heavy[-5:]: 
     print row
 for pair in zip(heavy["country_txt"],heavy["nkill"]):
     print pair
+
+# test selection query
+print heavy.select("nkill > 0")
     
 # FIX HOW COPY SELF
 #d2 = data.copy()

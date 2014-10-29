@@ -91,16 +91,15 @@ class Table:
     def copy(self, copyrows=True):
         new = Table()
         # copy table metadata
-        new.fields = [field for field in self.fields]
-        new.name = next(NAMES)
-        # copy rows with metadata
         if copyrows:
-            newrows = []
-            for row in self:
-                newrow = list(row)
-                newrow.__dict__.update( [item for item in row.items() if not item[0].startswith("_")] )
-                newrows.append(newrow)
-            new.rows = newrows
+            columns = [builder.Column(field.name,list(field.values),field.label,field.type,field.value_labels)
+                           for field in self.fields]
+        else:
+            columns = [builder.Column(field.name,[],field.label,field.type,field.value_labels)
+                           for field in self.fields]
+        new.fields = builder.ColumnMapper(columns)
+        new.rows = builder.RowMapper(self.fields)
+        new.name = next(builder.NAMES)
         # copy time info
         if self.is_temporal:
             new.starttime_expr = self.starttime_expr
@@ -113,15 +112,12 @@ class Table:
     ###### LAYOUT #######
 
     def sort_rows(self, sortfields, direction="down"):
-        if direction == "down": reverse = False
-        elif direction == "up": reverse = True
-        else: raise Exception("direction must be either 'up' or 'down'")
-        sortfieldindexes = [self.fields.index(field) for field in sortfields]
-        self.rows = list(sorted(self.rows, key=operator.itemgetter(*sortfieldindexes), reverse=reverse))
+        self.rows.sort(sortfields, direction)
         return self
 
-    def sort_fields(self, direction="right"):
-        self.fields.sort(direction)
+    def sort_fields(self, sortattributes=["name"], direction="right"):
+        self.fields.sort(sortattributes, direction)
+        return self
 
     def transpose(self):
         "ie switch axes, ie each unique variable becomes a unique row"
@@ -175,15 +171,19 @@ class Table:
     ###### EDIT #######
 
     def add_row(self, row):
-        pass
+        for field in self.fields:
+            field.values.append(builder.MISSING)
+        self.rows[-1] = row
     
     def edit_row(self, **kwargs):
-        pass
+        self.rows[-1] = row
 
     def keep_rows(self, *rows):
+        # by index
         pass
 
     def drop_rows(self, *rows):
+        # by index
         pass
 
     ###### FIELDS #######
@@ -197,11 +197,13 @@ class Table:
     def move_field(self, field, toindex):
         pass
 
-    def keep_fields(self, *fields):
-        pass
+    def keep_fields(self, *keepfields):
+        self.fields.columns = [field for field in self.fields if field.name in keepfields]
+        return self
 
-    def drop_fields(self, *fields):
-        pass
+    def drop_fields(self, *dropfields):
+        self.fields.columns = [field for field in self.fields if field.name not in dropfields]
+        return self
 
     ###### CLEAN #######
 
@@ -247,12 +249,13 @@ class Table:
         for row in self:
             # make fields into vars
             for field in self.fields:
-                value = row[self.fields.index(field)]
-                if isinstance(value, (unicode,str)):
-                    value = '"""'+str(value).replace('"',"'")+'"""'
-                elif isinstance(value, (int,float)):
-                    value = str(value)
-                code = "%s = %s"%(field,value)
+                fieldname = field.name
+                value = row[fieldname]
+                if isinstance(value, (int,float)):
+                    value = unicode(value)
+                else:
+                    value = '"""'+unicode(value).replace('"',"'")+'"""'
+                code = "%s = %s"%(fieldname,value)
                 exec(code)
             # run and retrieve query value
             yield eval(query)
@@ -261,14 +264,14 @@ class Table:
         outtable = self.copy(copyrows=False)
         for row,keep in zip(self,self.iter_select(query)):
             if keep:
-                outtable.append(row)
+                outtable.add_row(row)
         return outtable
 
     def exclude(self, query):
         outtable = Table()
         for row,drop in zip(self,self.iter_select(query)):
             if not drop:
-                outtable.append(row)
+                outtable.add_row(row)
         return outtable
 
     def find(self, query):

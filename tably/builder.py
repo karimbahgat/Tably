@@ -4,6 +4,7 @@
 
 import datetime
 import itertools
+import operator
 
 
 # CLASSES
@@ -305,8 +306,7 @@ class ColumnMapper:
                             break
                     else: raise Exception("Could not find field name %s" %stop)
 
-                if start > stop: start,stop = stop,start
-
+            if (start != None and stop != None) and start > stop: start,stop = stop,start
             if not step: step = 1
             if stop > len(self): stop = len(self)
             columns = self.columns[start:stop:step]
@@ -335,6 +335,13 @@ class ColumnMapper:
         else:
             for valindex in xrange(len(col)):
                 col[valindex] = item
+
+    def sort(self, sortattributes=["name"], direction="right"):
+        if not isinstance(sortattributes, (list,tuple)): sortattributes = [sortattributes]
+        if direction == "right": reverse = False
+        elif direction == "left": reverse = True
+        else: raise Exception("direction must be either 'right' or 'left'")
+        self.columns = list(sorted(self.columns, key=operator.attrgetter(*sortattributes) ))
 
 class Row:
     def __init__(self, columnmapper, i):
@@ -452,6 +459,20 @@ class RowMapper:
         else:
             raise Exception("A row can only be set to a dictionary, iterable, or another row instance")
 
+    def sort(self, sortfields, direction="down"):
+        if not isinstance(sortfields, (list,tuple)): sortfields = [sortfields]
+        if direction == "down": reverse = False
+        elif direction == "up": reverse = True
+        else: raise Exception("direction must be either 'down' or 'up'")
+        colnames = [col.name for col in self.columnmapper.columns]
+        sortfieldindexes = [colnames.index(field) for field in sortfields]
+        results = list(sorted(self, key=operator.itemgetter(*sortfieldindexes) ))
+        for col in self.columnmapper.columns:
+            col.values = [col.values[row.i] for row in results]
+        return self
+            
+
+
 
     
 
@@ -485,6 +506,7 @@ def build_table(table, fieldtuples, rows, name=None):
 def update_rows(table, rows):
     columns = []
     for col in table.fields:
+        # does it even do anything?
         col.values = [col.values[row.i] for row in rows]
         columns.append(col)
     columnmapper = ColumnMapper(columns)
