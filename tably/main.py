@@ -82,7 +82,8 @@ class Table:
     ###### GENERAL #######
 
     def save(self, savepath, **kwargs):
-        saver.to_file(savepath, **kwargs)
+        if not kwargs.get("encoding"): kwargs["encoding"] = builder.CODEC
+        saver.to_file(self, savepath, **kwargs)
 
     def view(self):
         rows, fields = self.to_list()
