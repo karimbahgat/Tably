@@ -107,7 +107,7 @@ somedata.add_field(name = "MigrAllyrs",
                    label = "Total migration for all years",
                    dtype = "integer" )
 for row in somedata:
-    row["MigrAllyrs"] = row["Migr89":"Migr14"]
+    row["MigrAllyrs"] = sum(row["Migr89":"Migr14"])
 
 #OR table-level
 somedata["MigrAllyrs"] = sum(somedata["Migr89":"Migr14"])

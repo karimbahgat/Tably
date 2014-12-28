@@ -6,6 +6,7 @@ from fileformats import PyDTA
 
 
 def from_file(filepath, delimiter=None, xlsheetname=None):
+    
     # determine filetype
     if filepath.endswith(".txt"):
         filetype = "txt"
@@ -23,6 +24,7 @@ def from_file(filepath, delimiter=None, xlsheetname=None):
         filetype = "spss"
     else:
         raise TypeError("Could not create a table from the given filepath: the filetype extension is either missing or not supported")
+    
     # import data and retrieve fieldnames
     if filetype in ("txt","csv"):
         fileobj = open(filepath, 'rU')
@@ -34,12 +36,14 @@ def from_file(filepath, delimiter=None, xlsheetname=None):
             rows = csv.reader(fileobj, delimiter=delimiter)
         rows = [eachrow for eachrow in rows]
         fieldtuples = [(varname,"",None,dict()) for varname in rows.pop(0)]
+        
     elif filetype == "excel":
         workbook = xlrd.open_workbook(filepath)
         if not xlsheetname: excelobj = workbook.sheet_by_index(0)
         else: excelobj = workbook.sheet_by_name(xlsheetname)
         rows = [excelobj.row_values(rowi,0,excelobj.ncols) for rowi in xrange(1, excelobj.nrows)]
         fieldtuples = [ (fieldname,"",None,dict()) for fieldname in excelobj.row_values(0,0,excelobj.ncols )]
+
     elif filetype == "dbf" or filetype == "shp":
         redirectpathtodbf = "/".join(filepath.split(".")[:-1])+".dbf"
         fileobj = open(redirectpathtodbf, 'rb')
@@ -47,6 +51,7 @@ def from_file(filepath, delimiter=None, xlsheetname=None):
         rows = [ eachrecord for eachrecord in shapereader.iterRecords()]
         fieldtuples = [(varname,"",vartype,dict()) for varname,vartype,_,_ in shapereader.fields[1:]]
         # maybe treat types according to column types
+        
     elif filetype == "spss":
         spssreader = savReaderWriter.SavReader(filepath)
         spssvalueLabels = spssreader.valueLabels
@@ -62,6 +67,7 @@ def from_file(filepath, delimiter=None, xlsheetname=None):
             rows.append(labeledrow)
         fieldtuples = [(varname,varlabel,vartype,valuelabels) for varname,varlabel,vartype,valuelabels in zip(spssreader.varNames,spssreader.varLabels,spssreader.varTypes,spssreader.valueLabels)]
         # maybe treat types according to column types
+        
     elif filetype == "dta":
         fileobj = open(filepath, "rb")
         statareader = PyDTA.StataTools.Reader(fileobj, missing_values=False)

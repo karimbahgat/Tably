@@ -30,7 +30,7 @@ class MissingValue:
     def __init__(self):
         pass
     def __str__(self):
-        return "<MissingValue>"
+        return "<None>"
 
     def __repr__(self):
         return self.__str__()
@@ -75,20 +75,37 @@ def forcefloat(x):
     except ValueError:
         if x == "" or x.isspace(): return MISSING
 
+def forcetext(x):
+    try:
+        return unicode(x, CODEC)
+    except (ValueError, TypeError):
+        if isinstance(x, unicode):
+            # value is already unicode
+            return x
+        if x in (False,None) or x == "" or (hasattr(x, "isspace") and x.isspace()):
+            # is missing value
+            return MISSING
+        else:
+            # cannot be converted with a codec, ie int or float
+            return unicode(x)
+
 COLUMNTYPES_FORCE = dict([("datetime", datetime.datetime),
                     ("integer", forceint),
                     ("float", forcefloat),
                     ("boolean", bool),
-                    ("text", lambda x: unicode(x, CODEC) ),
+                    ("text", forcetext),
                     ("flexi", lambda x: x)])
 
 
 class Column:
     def __init__(self, name, values, label="", dtype=None, value_labels=dict()):
-        self.name = name
-        self.label = label
+        self.name = forcetext(name)
+        self.label = forcetext(label)
+        if not isinstance(values, list): raise Exception("values argument must be a list of lists")
         self.values = values
+        if not isinstance(value_labels, dict): raise Exception("value_labels argument must be a dictionary")
         self.value_labels = value_labels
+        
         if not dtype:
             dtype = self.detect_type()
             self.convert_type(dtype)
@@ -123,8 +140,11 @@ class Column:
 
     def __setitem__(self, i, value):
         # here is the gateway that ensures all values correspond to columntype
-        convertfunc = COLUMNTYPES_FORCE[self.type]
-        self.values[i] = convertfunc(value)
+        if value == MISSING:
+            self.values[i] = value
+        else:
+            convertfunc = COLUMNTYPES_FORCE[self.type]
+            self.values[i] = convertfunc(value)
 
     def __add__(self, other):
         newcol = self.copy()
@@ -243,19 +263,33 @@ class Column:
         self.type = dtype
 
     def recode(self, oldval, newval):
-        pass
+        for i,value in enumerate(self.values):
+            if value == oldval:
+                self.values[i] = newval
 
     def recode_range(self, minval, maxval, newval):
-        pass
+        for i,value in enumerate(self.values):
+            if value >= minval and value < maxval:
+                self.values[i] = newval
 
     def recode_as_valuelabels(self):
         if self.value_labels:
-            self.type = self.detect_type(self.value_labels.values())
             self.values = [valuelabel for valuelabel in self]
+            self.type = self.detect_type()
             self.value_labels = dict()
 
-    def edit(self, **kwargs):
-        pass
+    def edit(self, name=None, values=None, label=None, dtype=None, value_labels=None):
+        if name: self.name = forcetext(name)
+        if label: self.label = forcetext(label)
+        if values:
+            if not isinstance(values, list): raise Exception("values argument must be a list of lists")
+            self.values = values
+        if value_labels:
+            if not isinstance(value_labels, dict): raise Exception("value_labels argument must be a dictionary")
+            self.value_labels = value_labels
+        if dtype:
+            self.convert_type(dtype)
+            self.type = dtype
 
     def drop(self):
         if self.columnmapper:
@@ -328,6 +362,17 @@ class ColumnMapper:
 
     def __setitem__(self, i, item):
         if isinstance(i, slice): raise Exception("You can only set one field at a time")
+
+        if isinstance(i, (str,unicode)):
+            # create new field if fieldname doesnt already exist
+            fieldnames = (field.name for field in self)
+            if i not in fieldnames:
+                if len(self.columns) > 0:
+                    length = len(self.columns[0])
+                else: length = 0
+                col = Column(name=i, values=[MISSING for _ in xrange(length)])
+                self.columns.append(col)
+            
         col = self[i]
         colindex = self.columns.index(col)
         if isinstance(item, Column):
@@ -384,6 +429,15 @@ class Row:
         col[self.i] = item
 
     @property
+    def list(self):
+        return list(self)
+
+    @property
+    def dict(self):
+        fields = (col.name for col in self.columnmapper.columns)
+        return dict(zip(fields, self))
+
+    @property
     def prev(self):
         if self.i > 0:
             return Row(self.columnmapper, self.i - 1)
@@ -394,7 +448,8 @@ class Row:
             return Row(self.columnmapper, self.i + 1)
 
     def edit(self, **kwargs):
-        pass
+        for field,value in kwargs.items():
+            self[field] = value
 
     def drop(self):
         for col in self.columnmapper.columns:

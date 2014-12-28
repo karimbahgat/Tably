@@ -107,7 +107,11 @@ class Table:
         return new
 
     def to_list(self):
-        pass
+        fields = [field.name for field in self.fields]
+        rows = [row.list for row in self]
+        tolist = [fields]
+        tolist.extend(rows)
+        return tolist
 
     ###### LAYOUT #######
 
@@ -126,13 +130,13 @@ class Table:
 
     # MAybe use https://pypi.python.org/pypi/pivottable/0.8
 
-    def to_values(self):
+    def to_values(self, seq):
         pass
 
-    def to_columns(self):
+    def to_columns(self, seq):
         pass
 
-    def to_rows(self):
+    def to_rows(self, seq):
         pass
 
 ##    def reshape(self, rows=None, fields=None):
@@ -175,27 +179,24 @@ class Table:
             field.values.append(builder.MISSING)
         self.rows[-1] = row
     
-    def edit_row(self, **kwargs):
-        self.rows[-1] = row
-
-    def keep_rows(self, *rows):
-        # by index
-        pass
-
-    def drop_rows(self, *rows):
-        # by index
-        pass
+    def edit_row(self, i, **kwargs):
+        self.rows[i].edit(**kwargs)
 
     ###### FIELDS #######
 
-    def add_field(self, field):
-        pass
+    def add_field(self, **kwargs):
+        column = builder.Column(**kwargs)
+        self.fields.columns.append(column)
+        builder.update_fields(self, self.fields.columns)
 
-    def edit_field(self, **kwargs):
-        pass
+    def edit_field(self, fieldname, **kwargs):
+        self.fields[fieldname].edit(**kwargs)
 
-    def move_field(self, field, toindex):
-        pass
+    def move_field(self, fieldname, toindex):
+        field = self.fields[fieldname]
+        field.drop()
+        self.fields.columns.insert(field, toindex)
+        builder.update_fields(self, self.fields.columns)
 
     def keep_fields(self, *keepfields):
         self.fields.columns = [field for field in self.fields if field.name in keepfields]
@@ -208,7 +209,7 @@ class Table:
     ###### CLEAN #######
 
     def convert_field(self, fieldname, dtype):
-        self.fields[fieldname].convert(dtype)
+        self.fields[fieldname].convert_type(dtype)
 
     def duplicates(self, duplicatefields):
         """
@@ -230,16 +231,10 @@ class Table:
         pass
 
     def recode(self, field, oldvalue, newvalue):
-        """
-        ...
-        """
-        pass
+        self.fields[field].recode(oldvalue, newvalue)
 
     def recode_range(self, field, minvalue, maxvalue, newvalue):
-        """
-        ...
-        """
-        pass
+        self.fields[field].recode_range(minvalue, maxvalue, newvalue)
 
     ###### SELECT #######
 
