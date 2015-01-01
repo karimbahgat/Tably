@@ -1,5 +1,8 @@
 import sys, os, itertools, operator
+import re
 import datetime
+
+from __builtin__ import __dict__ as BUILTINS
 
 from . import loader
 from . import builder
@@ -93,13 +96,11 @@ class Table:
         new = Table()
         # copy table metadata
         if copyrows:
-            columns = [builder.Column(field.name,list(field.values),field.label,field.type,field.value_labels)
-                           for field in self.fields]
+            columns = [field.copy() for field in self.fields]
         else:
-            columns = [builder.Column(field.name,[],field.label,field.type,field.value_labels)
-                           for field in self.fields]
+            columns = [field.copy(keepvalues=False) for field in self.fields]
         new.fields = builder.ColumnMapper(columns)
-        new.rows = builder.RowMapper(self.fields)
+        new.rows = builder.RowMapper(new.fields)
         new.name = next(builder.NAMES)
         # copy time info
         if self.is_temporal:
@@ -124,53 +125,20 @@ class Table:
         self.fields.sort(sortattributes, direction)
         return self
 
-    def transpose(self):
-        "ie switch axes, ie each unique variable becomes a unique row"
-        # ...
-        pass
-
-    # MAybe use https://pypi.python.org/pypi/pivottable/0.8
-
-    def to_values(self, seq):
-        pass
-
-    def to_columns(self, seq):
-        pass
-
-    def to_rows(self, seq):
-        pass
-
-##    def reshape(self, rows=None, fields=None):
-##        """
-##        ...define which fields should be on which axis...
-##        """
-##        pass
-   
-##    here are some options:
-##        variable names to rows
-##        rowids to variable names
-##        variable values to rows
-##        variable values to fields
-##    or more systematic:
-##                fields  rowids  values
-##        fields    -      dis            
-##        rowids  splfld    -           
-##        values  splfld            -
-    
-##    aka reshaping, aka melting into ids and measures (ie the ids decide the unit of analysis, the measures say which fieldnames to put in a "variable" field with a corresponding value in a "values" field), and casting the new fields into rows (ie turning variable names into id variables aka disaggregating) or fields (fields)
-##    http://had.co.nz/reshape/introduction.pdf
-##    def enrich_units(self):
-##        "aka shrink the dataset: each observation is made into one or more variables"
-##        # either by ranges or distinct categories
-##        # optional to force specified categories for the new variables, or build them naturally from observed values
-##        # choose to keep or drop the units used to enrich
+##    # Maybe use https://pypi.python.org/pypi/pivottable/0.8
+##
+##    def transpose(self):
+##        "ie switch axes, ie each unique variable becomes a unique row"
+##        # ...
 ##        pass
 ##
-##    def finer_unit_of_analysis(self):
-##        "aka expand the dataset: each variable is made into one or more observations"
-##        # either by ranges or distinct categories
-##        # optional to force specified categories for the new units, or build them naturally from observed values
-##        # choose to keep or drop the variables used for each new unit of analysis
+##    def to_values(self, seq):
+##        pass
+##
+##    def to_columns(self, seq):
+##        pass
+##
+##    def to_rows(self, seq):
 ##        pass
 
     ###### EDIT #######
@@ -185,8 +153,9 @@ class Table:
 
     ###### FIELDS #######
 
-    def add_field(self, **kwargs):
-        column = builder.Column(**kwargs)
+    def add_field(self, fieldobj=None, **kwargs):
+        if fieldobj: column = fieldobj.copy()
+        else: column = builder.Column(**kwargs)
         self.fields.columns.append(column)
         builder.update_fields(self, self.fields.columns)
 
@@ -212,24 +181,24 @@ class Table:
     def convert_field(self, fieldname, dtype):
         self.fields[fieldname].convert_type(dtype)
 
-    def duplicates(self, duplicatefields):
-        """
-        ...
-        """
-        pass
-
-    def unique(self):
-        """
-        ...
-        """
-        pass        
-
-    def outliers(self, type="stdev"):
-        """
-        ...
-        """
-        # see journalism, either stdev or mad
-        pass
+##    def duplicates(self, duplicatefields):
+##        """
+##        ...
+##        """
+##        pass
+##
+##    def unique(self):
+##        """
+##        ...
+##        """
+##        pass        
+##
+##    def outliers(self, type="stdev"):
+##        """
+##        ...
+##        """
+##        # see journalism, either stdev or mad
+##        pass
 
     def recode(self, field, oldvalue, newvalue):
         self.fields[field].recode(oldvalue, newvalue)
@@ -242,47 +211,47 @@ class Table:
     def iter_select(self, query):
         "return a generator of True False for each row's query result"
         # MAYBE ALSO ADD SUPPORT FOR SENDING A TEST FUNCTION
+
+        # ORIGINAL IDEA, BUT ADAPTED FOR EFFICIENCY FROM "PETL" LIB
+
+        # prep string to function conversion
+        prog = re.compile('\{([^}]+)\}')
+        def repl(matchobj):
+            return "rec['%s']" % matchobj.group(1)
+
+        # loop
         for row in self:
-            # make fields into vars
-            for field in self.fields:
-                fieldname = field.name
-                value = row[fieldname]
-                if isinstance(value, (int,float)):
-                    value = unicode(value)
-                else:
-                    value = '"""'+unicode(value).replace('"',"'")+'"""'
-                code = "%s = %s"%(fieldname,value)
-                exec(code)
             # run and retrieve query value
-            yield eval(query)
+            queryfunc = eval("lambda rec: " + prog.sub(repl, query))
+            yield queryfunc(row)
 
     def select(self, query):
         outtable = self.copy(copyrows=False)
-        for row,keep in zip(self,self.iter_select(query)):
+        for row,keep in itertools.izip(self,self.iter_select(query)):
             if keep:
                 outtable.add_row(row)
         return outtable
 
     def exclude(self, query):
         outtable = Table()
-        for row,drop in zip(self,self.iter_select(query)):
+        for row,drop in itertools.izip(self,self.iter_select(query)):
             if not drop:
                 outtable.add_row(row)
         return outtable
 
-    def find(self, query):
-        # maybe rename iter_query to this find, so that find can be iterated and can be used to find second, nth, and last occurance and not just the first one.
-        pass
+##    def find(self, query):
+##        # maybe rename iter_query to this find, so that find can be iterated and can be used to find second, nth, and last occurance and not just the first one.
+##        pass
 
     ###### GROUP #######
 
-    def membership(self, classifytype, manualbreaks=None):
-        """
-        Aka groups into classes or pools, potentially overlap bw groups. 
-        ...classify by autorange or manual breakpoints,
-        creating and returning a new table for each class...
-        """
-        pass
+##    def membership(self, classifytype, manualbreaks=None):
+##        """
+##        Aka groups into classes or pools, potentially overlap bw groups. 
+##        ...classify by autorange or manual breakpoints,
+##        creating and returning a new table for each class...
+##        """
+##        pass
 
     def split(self, splitfields):
         """
@@ -357,104 +326,80 @@ class Table:
                 row[self.fields.index(fieldname)] = result
         return self
 
-
-
-##    def split_values(self, field):
-##        """
-##        based on the values of a field,
-##        calculates:
-##            ...either each value category or summary of membership groups...
-##        and puts them:
-##            ...either into more fields or into additional rowids...
-##        """
-##        pass
-##
-##    def split_fieldnames(self, fieldnames, field):
-##        """
-##        based on the fieldvalue for each field for each row, 
-##        calculates:
-##            ...that fieldname and fieldvalue...
-##        and puts them:
-##            ...into additional rowids (the fieldname) with the value still in the original field...
-##        potentially:
-##            ...deleting the old fields...
-##        """
-##        pass
-##
-##    def split_rowids(self, rowids, field):
-##        """
-##        based on the grouped fieldvalues for each rowid, 
-##        calculates:
-##            ...the summary for that value...
-##        and puts them:
-##            ...into more fields...
-##        potentially:
-##            ...deleting duplicate rowids...
-##        """
-##        pass
-##
-##    def split_fieldnames_rowids(self, fieldnames, rowids, field):
-##        "combines the two above"
-##        pass
-
-
-
     ###### ANALYZE #######
 
-    def percent_change(self, before_column_name, after_column_name, new_column_name):
-        """
-        A wrapper around :meth:`compute` for quickly computing
-        percent change between two columns.
-
-        :param before_column_name: The name of the column containing the
-            *before* values. 
-        :param after_column_name: The name of the column containing the
-            *after* values.
-        :param new_column_name: The name of the resulting column.
-        :returns: A new :class:`Table`.
-        """
-        def calc(row):
-            return (row[after_column_name] - row[before_column_name]) / row[before_column_name] * 100
-
-        return self.compute(new_column_name, NumberType(), calc) 
-
-    def rank(self, key, new_column_name):
-        """
-        Creates a new column that is the rank order of the values
-        returned by the row function.
-
-        :param key:  
-        :param after_column_name: The name of the column containing the
-            *after* values.
-        :param new_column_name: The name of the resulting column.
-        :returns: A new :class:`Table`.
-        """
-        key_is_row_function = hasattr(key, '__call__')
-
-        def null_handler(k):
-            if k is None:
-                return NullOrder() 
-
-            return k
-
-        if key_is_row_function:
-            values = [key(row) for row in self.rows]
-            compute_func = lambda row: rank_column.index(key(row)) + 1
-        else:
-            values = [row[key] for row in self.rows]
-            compute_func = lambda row: rank_column.index(row[key]) + 1
-
-        rank_column = sorted(values, key=null_handler)
-
-        return self.compute(new_column_name, NumberType(), compute_func)
+##    def percent_change(self, before_column_name, after_column_name, new_column_name):
+##        """
+##        A wrapper around :meth:`compute` for quickly computing
+##        percent change between two columns.
+##
+##        :param before_column_name: The name of the column containing the
+##            *before* values. 
+##        :param after_column_name: The name of the column containing the
+##            *after* values.
+##        :param new_column_name: The name of the resulting column.
+##        :returns: A new :class:`Table`.
+##        """
+##        def calc(row):
+##            return (row[after_column_name] - row[before_column_name]) / row[before_column_name] * 100
+##
+##        return self.compute(new_column_name, NumberType(), calc) 
+##
+##    def rank(self, key, new_column_name):
+##        """
+##        Creates a new column that is the rank order of the values
+##        returned by the row function.
+##
+##        :param key:  
+##        :param after_column_name: The name of the column containing the
+##            *after* values.
+##        :param new_column_name: The name of the resulting column.
+##        :returns: A new :class:`Table`.
+##        """
+##        key_is_row_function = hasattr(key, '__call__')
+##
+##        def null_handler(k):
+##            if k is None:
+##                return NullOrder() 
+##
+##            return k
+##
+##        if key_is_row_function:
+##            values = [key(row) for row in self.rows]
+##            compute_func = lambda row: rank_column.index(key(row)) + 1
+##        else:
+##            values = [row[key] for row in self.rows]
+##            compute_func = lambda row: rank_column.index(row[key]) + 1
+##
+##        rank_column = sorted(values, key=null_handler)
+##
+##        return self.compute(new_column_name, NumberType(), compute_func)
 
     ###### CONNECT #######
 
-    def join(self, othertable, query):
-        """
-        ...
-        """
-        pass
+    def join(self, othertable, query, keepall=True):
+
+        # QUERY NEEDS TO BE ABLE TO DIFFER BETWEEN FIELDS FROM EACH TABLE
+        
+        # extend fieldnames
+        for field in othertable.fields:
+            # SHOULD MAKE FIELDNAMES UNIQUE
+            self.add_field(field)
+            
+        # loop rows
+        if keepall:
+            for row1 in self:
+                for row2,keep in itertools.izip(othertable,othertable.iter_select(query)):
+                    if keep:
+                        row1.edit(row2)
+        else:
+            for row1 in self:
+                for row2,keep in itertools.izip(othertable,othertable.iter_select(query)):
+                    if keep:
+                        row1.edit(row2)
+                    else:
+                        row1.drop()
+        return self
 
     def relate(self, othertable, query):
         """maybe add a .relates attribute dict to each row,
@@ -537,29 +482,29 @@ def new():
 def load(filepath=None, xlsheetname=None, data=None, name=None):
     return Table(filepath, xlsheetname, data, name)
 
-def merge(*mergetables):
-    #make empty table
-    firsttable = mergetables[0]
-    outtable = Table()
-    #combine fields from all tables
-    outfields = list(firsttable.fields)
-    for table in mergetables[1:]:
-        for field in table.fields:
-            if field not in outfields:
-                outfields.append(field)
-    outtable.setfields(outfields)
-    #add the rest of the tables
-    for table in mergetables:
-        for rowindex in xrange(table.len):
-            row = []
-            for field in outtable.fields:
-                if field in table.fields:
-                    row.append( table[rowindex][field] )
-                else:
-                    row.append( MISSING )
-            outtable.addrow(row)
-    #return merged table
-    return outtable
+##def merge(*mergetables):
+##    #make empty table
+##    firsttable = mergetables[0]
+##    outtable = Table()
+##    #combine fields from all tables
+##    outfields = list(firsttable.fields)
+##    for table in mergetables[1:]:
+##        for field in table.fields:
+##            if field not in outfields:
+##                outfields.append(field)
+##    outtable.setfields(outfields)
+##    #add the rest of the tables
+##    for table in mergetables:
+##        for rowindex in xrange(table.len):
+##            row = []
+##            for field in outtable.fields:
+##                if field in table.fields:
+##                    row.append( table[rowindex][field] )
+##                else:
+##                    row.append( MISSING )
+##            outtable.addrow(row)
+##    #return merged table
+##    return outtable
 
 
 

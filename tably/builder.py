@@ -224,13 +224,21 @@ class Column:
             if curindex < len(self.columnmapper.columns)-1:
                 return self.columnmapper.columns[curindex+1]
 
-    def copy(self):
-        newcol = Column(name=self.name,
-                        label=self.label,
-                        dtype=self.type,
-                        values=list(self.values),
-                        value_labels=self.value_labels.copy()
-                        )
+    def copy(self, keepvalues=True):
+        if keepvalues:
+            newcol = Column(name=self.name,
+                            label=self.label,
+                            dtype=self.type,
+                            values=list(self.values),
+                            value_labels=self.value_labels.copy()
+                            )
+        else:
+            newcol = Column(name=self.name,
+                            label=self.label,
+                            dtype=self.type,
+                            values=[],
+                            value_labels=self.value_labels.copy()
+                            )
         return newcol
 
     def detect_type(self):
@@ -447,9 +455,13 @@ class Row:
         if self.i < len(self.columnmapper.columns[0]) - 1:
             return Row(self.columnmapper, self.i + 1)
 
-    def edit(self, **kwargs):
-        for field,value in kwargs.items():
-            self[field] = value
+    def edit(self, rowobj=None, **kwargs):
+        if rowobj:
+            for rowfield in rowobj.columnmapper.columns:
+                self[rowfield.name] = value
+        else:
+            for field,value in kwargs.items():
+                self[field] = value
 
     def drop(self):
         for col in self.columnmapper.columns:

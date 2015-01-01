@@ -73,8 +73,11 @@ for pair in zip(heavy["country_txt"],heavy["nkill"]):
     print pair
 
 # test selection query
-print heavy.select("nkill > 0")
+print heavy.select("{nkill} > 0")
     
 # FIX HOW COPY SELF
-#d2 = data.copy()
-#print data.join("a2_country", d2, "a2_country")
+d2 = data.copy()
+print data.join(d2, "{f1} == {f2}")
+
+
+
