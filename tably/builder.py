@@ -98,7 +98,7 @@ COLUMNTYPES_FORCE = dict([("datetime", datetime.datetime),
 
 
 class Column:
-    def __init__(self, name, values, label="", dtype=None, value_labels=dict()):
+    def __init__(self, name, values=[], label="", dtype=None, value_labels=dict()):
         self.name = forcetext(name)
         self.label = forcetext(label)
         if not isinstance(values, list): raise Exception("values argument must be a list of lists")
@@ -458,7 +458,7 @@ class Row:
     def edit(self, rowobj=None, **kwargs):
         if rowobj:
             for rowfield in rowobj.columnmapper.columns:
-                self[rowfield.name] = value
+                self[rowfield.name] = rowfield.values[rowobj.i]
         else:
             for field,value in kwargs.items():
                 self[field] = value
@@ -501,8 +501,11 @@ class RowMapper:
             yield self[i]
             
     def __len__(self):
-        firstcolumn = self.columnmapper[0]
-        return len(firstcolumn)
+        if len(self.columnmapper) == 0:
+            return 0
+        else:
+            firstcolumn = self.columnmapper[0]
+            return len(firstcolumn)
 
     def __getitem__(self, i):
         # get one or more row instances

@@ -143,23 +143,29 @@ class Table:
 
     ###### EDIT #######
 
-    def add_row(self, row):
+    def add_row(self, row=None, **kwargs):
         for field in self.fields:
             field.values.append(builder.MISSING)
-        self.rows[-1] = row
+        if row:
+            self.rows[-1] = row
+        elif kwargs:
+            for field,value in kwargs.items():
+                self.rows[-1][field] = value
     
     def edit_row(self, i, **kwargs):
         self.rows[i].edit(**kwargs)
 
     ###### FIELDS #######
 
-    def add_field(self, fieldobj=None, **kwargs):
-        if fieldobj: column = fieldobj.copy()
-        else: column = builder.Column(**kwargs)
+    def add_field(self, **kwargs):
+        # note: all new fields are created empty
+        kwargs["values"] = [builder.MISSING for _ in xrange(len(self))] 
+        column = builder.Column(**kwargs)
         self.fields.columns.append(column)
         builder.update_fields(self, self.fields.columns)
 
     def edit_field(self, fieldname, **kwargs):
+        if kwargs.get("values") != None: raise Exception("To modify the values of a field, use the compute method, do not edit its 'values' attribute directly")
         self.fields[fieldname].edit(**kwargs)
 
     def move_field(self, fieldname, toindex):
@@ -208,22 +214,35 @@ class Table:
 
     ###### SELECT #######
 
-    def iter_select(self, query):
+    def iter_select(self, query=None, function=None):
         "return a generator of True False for each row's query result"
-        # MAYBE ALSO ADD SUPPORT FOR SENDING A TEST FUNCTION
 
-        # ORIGINAL IDEA, BUT ADAPTED FOR EFFICIENCY FROM "PETL" LIB
+        if function:
+            # iterate function results
+            for row in self:
+                result = function(row)
+                yield result
+                
+        elif query:
+            # prep query string
+            preppedlist = []
+            queryitems = query.split()
+            for item in queryitems:
+                item = item.strip()
+                # treat any non-builtin names as fieldnames
+                try: eval(item)
+                except SyntaxError: pass
+                except NameError: item = "row['%s']" %item
+                preppedlist.append( item )
+            query = " ".join(preppedlist)
 
-        # prep string to function conversion
-        prog = re.compile('\{([^}]+)\}')
-        def repl(matchobj):
-            return "rec['%s']" % matchobj.group(1)
+            # iterate query results
+            for row in self:
+                result = eval(query)
+                yield result
 
-        # loop
-        for row in self:
-            # run and retrieve query value
-            queryfunc = eval("lambda rec: " + prog.sub(repl, query))
-            yield queryfunc(row)
+        else:
+            raise Exception("Either the 'query' or 'function' argument must be given")
 
     def select(self, query):
         outtable = self.copy(copyrows=False)
@@ -377,37 +396,79 @@ class Table:
 
     ###### CONNECT #######
 
-    def join(self, othertable, query, keepall=True):
+    def join(self, othertable, query, mergematches=False, fieldmapping=tuple(), keepall=True):
 
-        # QUERY NEEDS TO BE ABLE TO DIFFER BETWEEN FIELDS FROM EACH TABLE
-        
+        output = self.copy(copyrows=False)
+
         # extend fieldnames
         for field in othertable.fields:
-            # SHOULD MAKE FIELDNAMES UNIQUE
-            self.add_field(field)
+            if field.name not in (f.name for f in output.fields):
+                output.add_field(name=field.name, label=field.label, dtype=field.type, value_labels=field.value_labels)
+
+##        # extend fieldnames
+##        for field in othertable.fields:
+##            name = field.name
+##            # uniqify name if duplicate
+##            count = 1
+##            while name in (f.name for f in self.fields):
+##                name = field.name + "_%i" %count
+##                count += 1
+##            output.add_field(name=name, label=field.label, dtype=field.type, value_labels=field.value_labels)
+
+        # prep twotable query string
+        preppedlist = []
+        queryitems = query.split()
+        for item in queryitems:
+            item = item.strip()
+            # treat any non-builtin names as a "table.fieldname" string
+            try: eval(item)
+            except SyntaxError: pass
+            except NameError:
+                if len(item.split(".")) != 2:
+                    raise Exception("fieldnames must be specified as either 'main' or 'other' followed by '.' and the fieldname")
+                table,field = item.split(".")
+                if table == "main":
+                    item = "row1['%s']" %field
+                elif table == "other":
+                    item = "row2['%s']" %field
+            preppedlist.append( item )
+        query = " ".join(preppedlist)
             
         # loop rows
-        if keepall:
-            for row1 in self:
-                for row2,keep in itertools.izip(othertable,othertable.iter_select(query)):
-                    if keep:
-                        row1.edit(row2)
-        else:
-            for row1 in self:
-                for row2,keep in itertools.izip(othertable,othertable.iter_select(query)):
-                    if keep:
-                        row1.edit(row2)
+        for row1 in self:
+            for row2 in othertable:
+                match = eval(query)
+                
+                if match:
+                    output.add_row(row1)
+                    output[-1].edit(row2)
+                    if mergematches:
+                        # many-to-one
+                        pass
                     else:
-                        row1.drop()
+                        # one-to-one
+                        break
+                    
+            if not match and keepall:
+                # failed to match, but keep anyway
+                output.add_row(row1)
+
+        # aggregate based on fieldmapping
+        if mergematches:
+            # HOW TO AGGREGATE?
+            self.aggregate(groupfields=[], fieldmapping=fieldmapping)
+
+        # change self in-place
+        self = output
         return self
 
-    def relate(self, othertable, query):
-        """maybe add a .relates attribute dict to each row,
-        with each relate dict entry being the unique tablename of the other table,
-        containing another dictionary with a "query" entry for that relate,
-        and a "links" entry with a list of rows pointing to the matching rows in the other table.
-        """
-        pass
+##    def relate(self, othertable, query):
+##        """maybe add a .relates attribute dict to each row,
+##        with each relate dict entry being the unique tablename of the other table,
+##        containing another dictionary with a "query" entry for that relate,
+##        and a "links" entry with a list of rows pointing to the matching rows in the other table.
+##        """
+##        pass
 
     ###### TIME #######
 
@@ -490,19 +551,15 @@ def load(filepath=None, xlsheetname=None, data=None, name=None):
 ##    outfields = list(firsttable.fields)
 ##    for table in mergetables[1:]:
 ##        for field in table.fields:
-##            if field not in outfields:
+##            if field.name not in (outfield.name for outfield in outfields):
 ##                outfields.append(field)
-##    outtable.setfields(outfields)
+##    for outfield in outfields:
+##        outtable.add_field(name=outfield.name, type=outfield.type)
 ##    #add the rest of the tables
 ##    for table in mergetables:
-##        for rowindex in xrange(table.len):
-##            row = []
-##            for field in outtable.fields:
-##                if field in table.fields:
-##                    row.append( table[rowindex][field] )
-##                else:
-##                    row.append( MISSING )
-##            outtable.addrow(row)
+##        for row in table:
+##            rowdict = row.as_dict()
+##            outtable.add_row(rowdict)
 ##    #return merged table
 ##    return outtable
 

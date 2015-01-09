@@ -73,11 +73,21 @@ for pair in zip(heavy["country_txt"],heavy["nkill"]):
     print pair
 
 # test selection query
-print heavy.select("{nkill} > 0")
+print heavy.select("nkill < 0")["nkill"]
+
     
 # FIX HOW COPY SELF
-d2 = data.copy()
-print data.join(d2, "{f1} == {f2}")
+print data
+
+data2 = tably.new()
+data2.add_field(name="nr", dtype="integer")
+for _ in xrange(5):
+    data2.add_row(nr=3)
+print data2
+
+joined = data.join(data2, "main.f3 == 'h' and not main.f5", keepall=False)
+for lst in joined.to_list():
+    print lst
 
 
 
