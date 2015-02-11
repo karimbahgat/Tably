@@ -521,7 +521,7 @@ class RowMapper:
     def __setitem__(self, i, item):
         if isinstance(i, slice): raise Exception("You can only set one row at a time")
         if isinstance(item, dict):
-            for key,value in item.keys():
+            for key,value in item.items():
                 self.columnmapper[key][i] = value
         elif isinstance(item, (list,tuple,Row)):
             for valindex,value in enumerate(item):

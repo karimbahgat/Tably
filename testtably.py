@@ -73,7 +73,7 @@ for pair in zip(heavy["country_txt"],heavy["nkill"]):
     print pair
 
 # test selection query
-print heavy.select("nkill < 0")["nkill"]
+print heavy.select("nkill < 20")["nkill"]
 
     
 # FIX HOW COPY SELF

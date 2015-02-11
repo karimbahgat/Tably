@@ -1,4 +1,5 @@
 import sys, os, itertools, operator
+import urllib
 import re
 import datetime
 
@@ -252,7 +253,7 @@ class Table:
         return outtable
 
     def exclude(self, query):
-        outtable = Table()
+        outtable = self.copy(copyrows=False)
         for row,drop in itertools.izip(self,self.iter_select(query)):
             if not drop:
                 outtable.add_row(row)
@@ -276,11 +277,14 @@ class Table:
         """
         Sharp/distinct groupings.
         """
-        fieldindexes = [self.fields.index(field) for field in splitfields]
+        fieldindexes = [self.fields.columns.index(self[fieldname]) for fieldname in splitfields]
         temprows = sorted(self.rows, key=operator.itemgetter(*fieldindexes))
         for combi,rows in itertools.groupby(temprows, key=operator.itemgetter(*fieldindexes) ):
-            table = self.copy(copyrows=False)
-            table.rows = list(rows)
+            table = new()
+            for field in self.fields:
+                table.add_field(field.name, field.type)
+            for row in rows:
+                table.add_row(list(row))
             table.name = str(combi)
             yield table
 
@@ -290,34 +294,45 @@ class Table:
         ...maybe make flexible, so aggregation can be on either unique fields, or on an expression or function that groups into membership categories (if so drop membership() method)...
         """
         if fieldmapping: aggfields,aggtypes = zip(*fieldmapping)
-        aggfunctions = dict([("count",len),
-                             ("sum",sum),
-                             ("max",max),
-                             ("min",min),
+        aggfunctions = dict([("count",stats.len_of),
+                             ("sum",stats.sum_of),
+                             ("max",stats.max_of),
+                             ("min",stats.min_of),
                              ("average",stats.average),
                              ("median",stats.median),
                              ("stdev",stats.stdev),
                              ("most common",stats.most_common),
                              ("least common",stats.least_common) ])
-        outtable = self.copy(copyrows=False)
-        fieldindexes = [self.fields.index(field) for field in groupfields]
+        # extend fields # NOT TESTED...
+        outtable = new()
+        for fieldname in groupfields:
+            field = self.fields[fieldname]
+            outtable.add_field(fieldname, type=field.type)
+        if fieldmapping: 
+            for fieldname in aggfields:
+                field = self.fields[fieldname]
+                outtable.add_field(fieldname, type=field.type)
+        
+        # aggregate
+        fieldindexes = [self.fields.columns.index(self[fieldname]) for fieldname in groupfields]
         temprows = sorted(self.rows, key=operator.itemgetter(*fieldindexes))
         for combi,rows in itertools.groupby(temprows, key=operator.itemgetter(*fieldindexes) ):
             if not isinstance(combi, tuple):
                 combi = tuple([combi])
+                
             # first the groupby values
             newrow = list(combi)
+            
             # then the aggregation values
             if fieldmapping:
                 columns = zip(*rows)
-                selectcolumns = [columns[self.fields.index(field)] for field in aggfields]
+                selectcolumns = [columns[self.fields.columns.index(self[field])] for field in aggfields]
                 for aggtype,values in zip(aggtypes,selectcolumns):
                     aggfunc = aggfunctions[aggtype]
                     aggvalue = aggfunc(values)
                     newrow.append(aggvalue)
-            outtable.append(newrow)
-        outtable.fields = groupfields
-        if fieldmapping: outtable.fields.extend(aggfields)
+            outtable.add_row(newrow)
+            
         return outtable
 
     ###### CREATE #######
@@ -542,6 +557,30 @@ def new():
 
 def load(filepath=None, xlsheetname=None, data=None, name=None):
     return Table(filepath, xlsheetname, data, name)
+
+def web_load(urlpath, savefolder=None, xlsheetname=None, name=None):
+    # save to temp location in current dir
+    if savefolder == None:
+        tempfile = True
+        savefolder = "" 
+    else: tempfile = False
+    
+    # load
+    filename = os.path.split(urlpath)[1]
+    download(urlpath, savefolder)
+    filepath = os.path.join(savefolder, filename)
+    data = load(filepath, xlsheetname, name=name)
+    
+    # remove temp file
+    if tempfile: os.remove(filepath)
+    return data
+
+def download(url, savefolder="", savename=None):
+    "download and load dataset or other content from web url"
+    if not savename:
+        savename = os.path.split(url)[1]
+    savepath = os.path.join(savefolder, savename)
+    urllib.urlretrieve(url, savepath)
 
 ##def merge(*mergetables):
 ##    #make empty table
