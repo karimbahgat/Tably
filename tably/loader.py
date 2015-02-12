@@ -8,19 +8,19 @@ from fileformats import PyDTA
 def from_file(filepath, delimiter=None, xlsheetname=None):
     
     # determine filetype
-    if filepath.endswith(".txt"):
+    if filepath.lower().endswith(".txt"):
         filetype = "txt"
-    elif filepath.endswith(".csv"):
+    elif filepath.lower().endswith(".csv"):
         filetype = "csv"
-    elif filepath.endswith((".xls", ".xlsx")):
+    elif filepath.lower().endswith((".xls", ".xlsx")):
         filetype = "excel"
-    elif filepath.endswith(".dbf"):
+    elif filepath.lower().endswith(".dbf"):
         filetype = "dbf"
-    elif filepath.endswith(".shp"):
+    elif filepath.lower().endswith(".shp"):
         filetype = "shp"
-    elif filepath.endswith(".dta"):
+    elif filepath.lower().endswith(".dta"):
         filetype = "dta"
-    elif filepath.endswith(".sav"):
+    elif filepath.lower().endswith(".sav"):
         filetype = "spss"
     else:
         raise TypeError("Could not create a table from the given filepath: the filetype extension is either missing or not supported")

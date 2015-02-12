@@ -185,8 +185,8 @@ class Table:
 
     ###### CLEAN #######
 
-    def convert_field(self, fieldname, dtype):
-        self.fields[fieldname].convert_type(dtype)
+    def convert_field(self, fieldname, type):
+        self.fields[fieldname].convert_type(type)
 
 ##    def duplicates(self, duplicatefields):
 ##        """
@@ -225,22 +225,9 @@ class Table:
                 yield result
                 
         elif query:
-            # prep query string
-            preppedlist = []
-            queryitems = query.split()
-            for item in queryitems:
-                item = item.strip()
-                # treat any non-builtin names as fieldnames
-                try: eval(item)
-                except SyntaxError: pass
-                except NameError: item = "row['%s']" %item
-                preppedlist.append( item )
-            query = " ".join(preppedlist)
-
-            # iterate query results
             for row in self:
-                result = eval(query)
-                yield result
+                # run and retrieve query value
+                yield eval(query)
 
         else:
             raise Exception("Either the 'query' or 'function' argument must be given")
@@ -282,7 +269,7 @@ class Table:
         for combi,rows in itertools.groupby(temprows, key=operator.itemgetter(*fieldindexes) ):
             table = new()
             for field in self.fields:
-                table.add_field(field.name, field.type)
+                table.add_field(name=field.name, type=field.type)
             for row in rows:
                 table.add_row(list(row))
             table.name = str(combi)
@@ -418,7 +405,7 @@ class Table:
         # extend fieldnames
         for field in othertable.fields:
             if field.name not in (f.name for f in output.fields):
-                output.add_field(name=field.name, label=field.label, dtype=field.type, value_labels=field.value_labels)
+                output.add_field(name=field.name, label=field.label, type=field.type, value_labels=field.value_labels)
 
 ##        # extend fieldnames
 ##        for field in othertable.fields:
@@ -428,7 +415,7 @@ class Table:
 ##            while name in (f.name for f in self.fields):
 ##                name = field.name + "_%i" %count
 ##                count += 1
-##            output.add_field(name=name, label=field.label, dtype=field.type, value_labels=field.value_labels)
+##            output.add_field(name=name, label=field.label, type=field.type, value_labels=field.value_labels)
 
         # prep twotable query string
         preppedlist = []
@@ -582,25 +569,25 @@ def download(url, savefolder="", savename=None):
     savepath = os.path.join(savefolder, savename)
     urllib.urlretrieve(url, savepath)
 
-##def merge(*mergetables):
-##    #make empty table
-##    firsttable = mergetables[0]
-##    outtable = Table()
-##    #combine fields from all tables
-##    outfields = list(firsttable.fields)
-##    for table in mergetables[1:]:
-##        for field in table.fields:
-##            if field.name not in (outfield.name for outfield in outfields):
-##                outfields.append(field)
-##    for outfield in outfields:
-##        outtable.add_field(name=outfield.name, type=outfield.type)
-##    #add the rest of the tables
-##    for table in mergetables:
-##        for row in table:
-##            rowdict = row.as_dict()
-##            outtable.add_row(rowdict)
-##    #return merged table
-##    return outtable
+def merge(*mergetables):
+    #make empty table
+    firsttable = mergetables[0]
+    outtable = Table()
+    #combine fields from all tables
+    outfields = list(firsttable.fields)
+    for table in mergetables[1:]:
+        for field in table.fields:
+            if field.name not in (outfield.name for outfield in outfields):
+                outfields.append(field)
+    for outfield in outfields:
+        outtable.add_field(name=outfield.name, type=outfield.type)
+    #add the rest of the tables
+    for table in mergetables:
+        for row in table:
+            rowdict = row.as_dict()
+            outtable.add_row(rowdict)
+    #return merged table
+    return outtable
 
 
 

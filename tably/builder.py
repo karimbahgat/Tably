@@ -29,11 +29,33 @@ NAMES = NameGen()
 class MissingValue:
     def __init__(self):
         pass
+    
     def __str__(self):
         return "<None>"
 
     def __repr__(self):
         return self.__str__()
+
+    def __add__(self, other):
+        return other
+
+    def __radd__(self, other): # in case using sum() which starts with value 0
+        return other
+
+    def __sub__(self, other):
+        return -1*other
+
+    def __rsub__(self, other):
+        return other
+                
+    def __mul__(self, other):
+        return self
+
+    def __div__(self, other):
+        return self
+
+    def __float__(self):
+        return self
 
 MISSING = MissingValue()
 
@@ -98,7 +120,7 @@ COLUMNTYPES_FORCE = dict([("datetime", datetime.datetime),
 
 
 class Column:
-    def __init__(self, name, values=[], label="", dtype=None, value_labels=dict()):
+    def __init__(self, name, values=[], label="", type=None, value_labels=dict()):
         self.name = forcetext(name)
         self.label = forcetext(label)
         if not isinstance(values, list): raise Exception("values argument must be a list of lists")
@@ -106,10 +128,10 @@ class Column:
         if not isinstance(value_labels, dict): raise Exception("value_labels argument must be a dictionary")
         self.value_labels = value_labels
         
-        if not dtype:
-            dtype = self.detect_type()
-            self.convert_type(dtype)
-        self.type = dtype
+        if not type:
+            type = self.detect_type()
+            self.convert_type(type)
+        self.type = type
         self.columnmapper = None
 
     def __str__(self):
@@ -228,14 +250,14 @@ class Column:
         if keepvalues:
             newcol = Column(name=self.name,
                             label=self.label,
-                            dtype=self.type,
+                            type=self.type,
                             values=list(self.values),
                             value_labels=self.value_labels.copy()
                             )
         else:
             newcol = Column(name=self.name,
                             label=self.label,
-                            dtype=self.type,
+                            type=self.type,
                             values=[],
                             value_labels=self.value_labels.copy()
                             )
@@ -260,15 +282,15 @@ class Column:
         # that can successfully be used for all values
         return detecttype
 
-    def convert_type(self, dtype):
+    def convert_type(self, type):
         # convert all values
-        convertfunc = COLUMNTYPES_FORCE[dtype]
+        convertfunc = COLUMNTYPES_FORCE[type]
         for i,value in enumerate(self.values):
             if value == MISSING:
                 continue
             newvalue = convertfunc(value)
             self.values[i] = newvalue
-        self.type = dtype
+        self.type = type
 
     def recode(self, oldval, newval):
         for i,value in enumerate(self.values):
@@ -286,7 +308,7 @@ class Column:
             self.type = self.detect_type()
             self.value_labels = dict()
 
-    def edit(self, name=None, values=None, label=None, dtype=None, value_labels=None):
+    def edit(self, name=None, values=None, label=None, type=None, value_labels=None):
         if name: self.name = forcetext(name)
         if label: self.label = forcetext(label)
         if values:
@@ -295,9 +317,9 @@ class Column:
         if value_labels:
             if not isinstance(value_labels, dict): raise Exception("value_labels argument must be a dictionary")
             self.value_labels = value_labels
-        if dtype:
-            self.convert_type(dtype)
-            self.type = dtype
+        if type:
+            self.convert_type(type)
+            self.type = type
 
     def drop(self):
         if self.columnmapper:
@@ -394,7 +416,7 @@ class ColumnMapper:
         if direction == "right": reverse = False
         elif direction == "left": reverse = True
         else: raise Exception("direction must be either 'right' or 'left'")
-        self.columns = list(sorted(self.columns, key=operator.attrgetter(*sortattributes) ))
+        self.columns = list(sorted(self.columns, key=operator.attrgetter(*sortattributes), reverse=reverse ))
 
 class Row:
     def __init__(self, columnmapper, i):
@@ -536,7 +558,7 @@ class RowMapper:
         else: raise Exception("direction must be either 'down' or 'up'")
         colnames = [col.name for col in self.columnmapper.columns]
         sortfieldindexes = [colnames.index(field) for field in sortfields]
-        results = list(sorted(self, key=operator.itemgetter(*sortfieldindexes) ))
+        results = list(sorted(self, key=operator.itemgetter(*sortfieldindexes), reverse=reverse ))
         for col in self.columnmapper.columns:
             col.values = [col.values[row.i] for row in results]
         return self
@@ -558,8 +580,8 @@ def build_table(table, fieldtuples, rows, name=None):
     columns = []
     for i,(fieldtuple,values) in enumerate(itertools.izip_longest(fieldtuples,values_bycolumn)):
         values = list(values)
-        fieldname,label,dtype,value_labels = fieldtuple
-        col = Column(fieldname,values,label,dtype,value_labels)
+        fieldname,label,type,value_labels = fieldtuple
+        col = Column(fieldname,values,label,type,value_labels)
         columns.append(col)
         
     columnmapper = ColumnMapper(columns)

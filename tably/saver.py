@@ -7,7 +7,7 @@ def to_file(table, savepath, **kwargs):
         else: x = repr(x)
         return x
     
-    if savepath.endswith(".txt"):
+    if savepath.lower().endswith(".txt"):
         writer = open(savepath, "w")
         fields = [encode(field.name) for field in table.fields]
         writer.write("\t".join(fields) + "\n")
