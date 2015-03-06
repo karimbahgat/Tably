@@ -36,6 +36,12 @@ class MissingValue:
     def __repr__(self):
         return self.__str__()
 
+    def __nonzero__(self):
+        return False
+
+    def __len__(self):
+        return 0
+
     def __add__(self, other):
         return other
 
@@ -51,7 +57,13 @@ class MissingValue:
     def __mul__(self, other):
         return self
 
+    def __rmul__(self, other):
+        return self
+
     def __div__(self, other):
+        return self
+
+    def __rdiv__(self, other):
         return self
 
     def __float__(self):
@@ -59,6 +71,14 @@ class MissingValue:
 
 MISSING = MissingValue()
 
+def detect_missing(value):
+    if isinstance(value, (str,unicode)):
+        if value == "" or value.isspace():
+            return True
+        elif value.strip().lower() in ("<none>",".","..","-","--","na","n/a","nan","none","missing"):
+            return True
+    elif value in (MISSING,False,None,):
+        return True
 
 
 
@@ -67,7 +87,7 @@ def isint(x):
         conv = float(x)
         return conv.is_integer()
     except ValueError:
-        if x == "" or x.isspace(): return True
+        if detect_missing(x): return True
         return False
 
 def isfloat(x):
@@ -75,7 +95,7 @@ def isfloat(x):
         float(x)
         return True
     except ValueError:
-        if x == "" or x.isspace(): return True
+        if detect_missing(x): return True
         return False
 
 COLUMNTYPES_TEST = dict([("datetime", lambda x: isinstance(x,datetime.datetime) ),
@@ -89,24 +109,24 @@ def forceint(x):
     try:
         return int(x)
     except ValueError:
-        if x == "" or x.isspace(): return MISSING
+        if detect_missing(x): return MISSING
 
 def forcefloat(x):
     try:
         return float(x)
     except ValueError:
-        if x == "" or x.isspace(): return MISSING
+        if detect_missing(x): return MISSING
 
 def forcetext(x):
+    if detect_missing(x): 
+        # is missing value
+        return MISSING
     try:
         return unicode(x, CODEC)
     except (ValueError, TypeError):
         if isinstance(x, unicode):
             # value is already unicode
             return x
-        if x in (False,None) or x == "" or (hasattr(x, "isspace") and x.isspace()):
-            # is missing value
-            return MISSING
         else:
             # cannot be converted with a codec, ie int or float
             return unicode(x)
@@ -162,7 +182,7 @@ class Column:
 
     def __setitem__(self, i, value):
         # here is the gateway that ensures all values correspond to columntype
-        if value == MISSING:
+        if detect_missing(value):
             self.values[i] = value
         else:
             convertfunc = COLUMNTYPES_FORCE[self.type]
@@ -232,6 +252,10 @@ class Column:
                 if val == MISSING: continue
                 newcol.values[i] = val / float(other)
         return newcol
+
+    @property
+    def i(self):
+        return self.columnmapper.columns.index(self)
 
     @property
     def prev(self):
@@ -489,6 +513,9 @@ class Row:
         for col in self.columnmapper.columns:
             col.values.pop(self.i)
 
+    def copy(self):
+        return Row(self.columnmapper, self.i)
+
 class RowMapper:
     def __init__(self, columnmapper):
         self.columnmapper = columnmapper
@@ -562,8 +589,62 @@ class RowMapper:
         for col in self.columnmapper.columns:
             col.values = [col.values[row.i] for row in results]
         return self
-            
 
+
+class Indicator(Table):           
+    def __init__(self):
+        """
+        Contains one or more versions of the indicator in a common date range,
+        where the values are measured in different units
+
+        indicator
+            unit1
+                obs1
+                    date1: value
+                    date2: value
+                    date3: value
+                obs2
+                    date1: value
+                    date2: value
+                    date3: value
+                obs3
+                    date1: value
+                    date2: value
+                    date3: value
+            unit2
+                ...
+        """
+        Table.__init__(self)
+
+    def get_unit(self):
+        pass
+
+class Unit:
+    def __init__(self):
+        """
+        Contains a table of observations, eg countries.
+        """
+        pass
+
+    def get_obs(self):
+        pass
+
+class Observation:
+    def __init__(self):
+        """
+        Contains an observation id, along with a timeseries.
+        """
+        pass
+
+    def get_timeseries(self):
+        pass
+
+class TimeSeries:
+    def __init__(self):
+        """
+        Contains an ordered list of date-value tuples
+        """
+        pass
 
 
     

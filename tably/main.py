@@ -215,22 +215,22 @@ class Table:
 
     ###### SELECT #######
 
-    def iter_select(self, query=None, function=None):
+    def iter_select(self, query):
         "return a generator of True False for each row's query result"
 
-        if function:
+        if hasattr(query, "__call__"):
             # iterate function results
             for row in self:
-                result = function(row)
+                result = query(row)
                 yield result
                 
-        elif query:
+        elif isinstance(query, (str,unicode)): 
             for row in self:
                 # run and retrieve query value
                 yield eval(query)
 
         else:
-            raise Exception("Either the 'query' or 'function' argument must be given")
+            raise Exception("The 'query' argument must either be a query string or a function")
 
     def select(self, query):
         outtable = self.copy(copyrows=False)
@@ -260,6 +260,25 @@ class Table:
 ##        """
 ##        pass
 
+    def iter_group(self, fields=None, func=None, query=None):
+        """
+        Group in any way, low-level used by other convenience function,
+        only returns raw data ie groups of rows. 
+        """
+        # define grouping function
+        if fields:
+            fieldindexes = [self.fields.columns.index(self[fieldname]) for fieldname in fields]
+            groupfunc = lambda x: operator.itemgetter(*fieldindexes)
+        elif func:
+            groupfunc = func
+        elif query:
+            groupfunc = lambda row: eval(query)
+        
+        # group them
+        temprows = sorted(self.rows, key=groupfunc)
+        for combi,rows in itertools.groupby(temprows, key=groupfunc):
+            yield combi,rows
+
     def split(self, splitfields):
         """
         Sharp/distinct groupings.
@@ -272,7 +291,7 @@ class Table:
                 table.add_field(name=field.name, type=field.type)
             for row in rows:
                 table.add_row(list(row))
-            table.name = str(combi)
+            table.name = unicode(combi)
             yield table
 
     def aggregate(self, groupfields, fieldmapping=[]):
@@ -324,27 +343,14 @@ class Table:
 
     ###### CREATE #######
 
-    def compute(self, fieldname, expression, query=None):
+    def compute(self, fieldname, expression):
         # NOTE: queries and expressions currently do not validate
         # that value types are of the same kind, eg querying if a number
         # is bigger than a string, so may lead to weird results or errors. 
-        if not fieldname in self.fields:
-            self.addfield(fieldname)
-        expression = "result = %s" % expression
+        if not fieldname in (field.name for field in self.fields):
+            self.add_field(name=fieldname)
         for row in self:
-            # make fields into vars
-            for field in self.fields:
-                value = row[self.fields.index(field)]
-                if isinstance(value, (unicode,str)):
-                    value = '"""'+str(value).replace('"',"'")+'"""'
-                elif isinstance(value, (int,float)):
-                    value = str(value)
-                code = "%s = %s"%(field,value)
-                exec(code)
-            # run and retrieve expression value          
-            if not query or (eval(query) == True):
-                exec(expression)
-                row[self.fields.index(fieldname)] = result
+            row[fieldname] = eval(expression)
         return self
 
     ###### ANALYZE #######
@@ -584,7 +590,7 @@ def merge(*mergetables):
     #add the rest of the tables
     for table in mergetables:
         for row in table:
-            rowdict = row.as_dict()
+            rowdict = row.dict
             outtable.add_row(rowdict)
     #return merged table
     return outtable
