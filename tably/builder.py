@@ -110,12 +110,14 @@ def forceint(x):
         return int(x)
     except ValueError:
         if detect_missing(x): return MISSING
+        raise ValueError("Could not force value to type int")
 
 def forcefloat(x):
     try:
         return float(x)
     except ValueError:
         if detect_missing(x): return MISSING
+        raise ValueError("Could not force value to type float")
 
 def forcetext(x):
     if detect_missing(x): 
@@ -149,8 +151,13 @@ class Column:
         self.value_labels = value_labels
         
         if not type:
+            # force detect type if values provided, ie loaded from file
             type = self.detect_type()
             self.convert_type(type)
+        elif not type:
+            # hmmm, need to change
+            # user created blank column and omitted type, so assume flexible
+            type = "flexi"
         self.type = type
         self.columnmapper = None
 
@@ -589,62 +596,6 @@ class RowMapper:
         for col in self.columnmapper.columns:
             col.values = [col.values[row.i] for row in results]
         return self
-
-
-class Indicator(Table):           
-    def __init__(self):
-        """
-        Contains one or more versions of the indicator in a common date range,
-        where the values are measured in different units
-
-        indicator
-            unit1
-                obs1
-                    date1: value
-                    date2: value
-                    date3: value
-                obs2
-                    date1: value
-                    date2: value
-                    date3: value
-                obs3
-                    date1: value
-                    date2: value
-                    date3: value
-            unit2
-                ...
-        """
-        Table.__init__(self)
-
-    def get_unit(self):
-        pass
-
-class Unit:
-    def __init__(self):
-        """
-        Contains a table of observations, eg countries.
-        """
-        pass
-
-    def get_obs(self):
-        pass
-
-class Observation:
-    def __init__(self):
-        """
-        Contains an observation id, along with a timeseries.
-        """
-        pass
-
-    def get_timeseries(self):
-        pass
-
-class TimeSeries:
-    def __init__(self):
-        """
-        Contains an ordered list of date-value tuples
-        """
-        pass
 
 
     

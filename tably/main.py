@@ -138,9 +138,22 @@ class Table:
 ##
 ##    def to_columns(self, seq):
 ##        pass
-##
-##    def to_rows(self, seq):
-##        pass
+
+    def to_rows(self, seq):
+        """Assuming seq is a sequence of field objs"""
+        outtable = self.copy(copyrows=False)
+        outtable.add_field(name="variable", type="text")
+        outtable.add_field(name="value", type="flexi")
+        for row in self:
+            for field in seq:
+                rowdict = row.dict
+                rowdict["variable"] = field.name
+                rowdict["value"] = field.values[row.i]
+                outtable.add_row(rowdict)
+        # delete old fields that were pivoted
+        outtable.drop_fields(*[field.name for field in seq])
+        builder.update_rows(outtable, outtable.rows)
+        return outtable
 
     ###### EDIT #######
 
@@ -158,10 +171,12 @@ class Table:
 
     ###### FIELDS #######
 
-    def add_field(self, **kwargs):
-        # note: all new fields are created empty
-        kwargs["values"] = [builder.MISSING for _ in xrange(len(self))] 
-        column = builder.Column(**kwargs)
+    def add_field(self, column=None, **kwargs):
+        if column == None:
+            # note: all new fields are created empty
+            kwargs["values"] = [builder.MISSING for _ in xrange(len(self))]
+            if not kwargs.get("type"): kwargs["type"] = "flexi"
+            column = builder.Column(**kwargs)
         self.fields.columns.append(column)
         builder.update_fields(self, self.fields.columns)
 
@@ -177,10 +192,12 @@ class Table:
 
     def keep_fields(self, *keepfields):
         self.fields.columns = [field for field in self.fields if field.name in keepfields]
+        builder.update_fields(self, self.fields.columns)
         return self
 
     def drop_fields(self, *dropfields):
         self.fields.columns = [field for field in self.fields if field.name not in dropfields]
+        builder.update_fields(self, self.fields.columns)
         return self
 
     ###### CLEAN #######
@@ -313,11 +330,11 @@ class Table:
         outtable = new()
         for fieldname in groupfields:
             field = self.fields[fieldname]
-            outtable.add_field(fieldname, type=field.type)
+            outtable.add_field(name=fieldname, type=field.type)
         if fieldmapping: 
             for fieldname in aggfields:
                 field = self.fields[fieldname]
-                outtable.add_field(fieldname, type=field.type)
+                outtable.add_field(name=fieldname, type=field.type)
         
         # aggregate
         fieldindexes = [self.fields.columns.index(self[fieldname]) for fieldname in groupfields]
@@ -343,14 +360,22 @@ class Table:
 
     ###### CREATE #######
 
-    def compute(self, fieldname, expression):
+    def compute(self, fieldname, expression, fieldtype="flexi"):
         # NOTE: queries and expressions currently do not validate
         # that value types are of the same kind, eg querying if a number
-        # is bigger than a string, so may lead to weird results or errors. 
+        # is bigger than a string, so may lead to weird results or errors.
+            
         if not fieldname in (field.name for field in self.fields):
-            self.add_field(name=fieldname)
-        for row in self:
-            row[fieldname] = eval(expression)
+            self.add_field(name=fieldname, type=fieldtype)
+
+        if hasattr(expression, "__call__"):
+            for row in self:
+                row[fieldname] = expression(row)
+
+        elif isinstance(expression, (str,unicode)):
+            for row in self:
+                row[fieldname] = eval(expression)
+        
         return self
 
     ###### ANALYZE #######
