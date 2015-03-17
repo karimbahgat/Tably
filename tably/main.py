@@ -27,12 +27,15 @@ class Table:
     def __len__(self):
         return self.height
 
-    def __str__(self):
+    def __unicode__(self):
         return "\n".join([ "Table instance: %s" % self.name,
                            "Width: %s" % self.width,
                            "Height: %s" % self.height,
-                           str(self.fields)[:-1],
-                           str(self.rows) ])
+                           unicode(self.fields)[:-1],
+                           unicode(self.rows) ])
+
+    def __str__(self):
+        return self.__unicode__().encode(sys.stdout.encoding)
 
     def __iter__(self):
         for row in self.rows:
@@ -141,19 +144,28 @@ class Table:
 
     def to_rows(self, seq):
         """Assuming seq is a sequence of field objs"""
-        outtable = self.copy(copyrows=False)
-        outtable.add_field(name="variable", type="text")
-        outtable.add_field(name="value", type="flexi")
-        for row in self:
-            for field in seq:
-                rowdict = row.dict
-                rowdict["variable"] = field.name
-                rowdict["value"] = field.values[row.i]
-                outtable.add_row(rowdict)
-        # delete old fields that were pivoted
-        outtable.drop_fields(*[field.name for field in seq])
-        builder.update_rows(outtable, outtable.rows)
-        return outtable
+        # detect seq type
+        if isinstance(seq, builder.ColumnMapper):
+            outtable = self.copy(copyrows=False)
+            outtable.add_field(name="variable", type="text")
+            outtable.add_field(name="value", type="flexi")
+            for row in self:
+                for field in seq:
+                    rowdict = row.dict
+                    rowdict["variable"] = field.name
+                    rowdict["value"] = field.values[row.i]
+                    outtable.add_row(rowdict)
+            # delete old fields that were pivoted
+            outtable.drop_fields(*[field.name for field in seq])
+            builder.update_rows(outtable, outtable.rows)
+            return outtable
+        elif isinstace(seq, builder.Column):
+            # combine each row with each unique sorted values from column
+            pass
+        elif isinstance(seq, (list,tuple)):
+            pass
+        elif isinstance(seq, (str,unicode)):
+            pass
 
     ###### EDIT #######
 

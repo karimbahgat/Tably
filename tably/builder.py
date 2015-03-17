@@ -2,6 +2,7 @@
 ...
 """
 
+import sys
 import datetime
 import itertools
 import operator
@@ -77,7 +78,7 @@ def detect_missing(value):
             return True
         elif value.strip().lower() in ("<none>",".","..","-","--","na","n/a","nan","none","missing"):
             return True
-    elif value in (MISSING,False,None,):
+    elif not value and value != 0:
         return True
 
 
@@ -161,7 +162,7 @@ class Column:
         self.type = type
         self.columnmapper = None
 
-    def __str__(self):
+    def __unicode__(self):
         uniqvalues = list(unicode(value)[:50] for value in sorted(set(self)))
         if len(uniqvalues) > 30:
             uniqvalues = uniqvalues[:30]
@@ -172,6 +173,9 @@ class Column:
                "\n  Unique values:" + \
                "\n    " + "\n    ".join(uniqvalues) + \
                "\n"
+
+    def __str__(self):
+        return self.__unicode__().encode(sys.stdout.encoding)
 
     def __iter__(self):
         for i in xrange(len(self)):
@@ -365,11 +369,14 @@ class ColumnMapper:
             col.columnmapper = self
         self.columns = columns
 
-    def __str__(self):
+    def __unicode__(self):
         fieldtuples = [ "%s (%s)"%(field.name,field.type) for field in self.columns ]
         return "Fields:" + \
                "\n  " + "\n  ".join(fieldtuples) + \
                "\n"
+
+    def __str__(self):
+        return self.__unicode__().encode(sys.stdout.encoding)
 
     def __iter__(self):
         for col in self.columns:
@@ -454,7 +461,7 @@ class Row:
         self.columnmapper = columnmapper
         self.i = i
 
-    def __str__(self):
+    def __unicode__(self):
         # MAYBE USE PRETTYTABLE FOR FORMATTING: https://code.google.com/p/prettytable/
         rowtuples = []
         for field,value in zip(self.columnmapper.columns, self):
@@ -466,6 +473,9 @@ class Row:
         return "Row #%s:"%self.i + \
                "\n  " + "\n  ".join(("%r: %r"%rowtuple for rowtuple in rowtuples)) + \
                "\n"
+
+    def __str__(self):
+        return self.__unicode__().encode(sys.stdout.encoding)
 
     def __iter__(self):
         for i in xrange(len(self)):
@@ -527,7 +537,7 @@ class RowMapper:
     def __init__(self, columnmapper):
         self.columnmapper = columnmapper
 
-    def __str__(self):
+    def __unicode__(self):
         samplerows = []
         looplen = len(self)
         if looplen > 30: looplen = 30
@@ -551,6 +561,9 @@ class RowMapper:
         return "Rows:" + \
                "\n  " + "\n  ".join(("[ %r ]" %" , ".join(row) for row in samplerows)) + \
                "\n"
+
+    def __str__(self):
+        return self.__unicode__().encode(sys.stdout.encoding)
 
     def __iter__(self):
         for i in xrange(len(self)):
