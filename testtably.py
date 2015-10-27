@@ -1,6 +1,16 @@
 import tably
 
 
+# iter select speedtest
+import time
+virtual = [ ["f%i"%i for i in range(100)] ]
+data = tably.load(data=virtual)
+t = time.time()
+import random
+print time.time() - t
+
+fdsfsd
+
 #data = tably.load(r"D:\My Files\GIS Data\(Easy Georeferencer)\TestingGrounds\(I.np.uts)\GTDinput.txt")
 data = tably.load(data=["f1 f2 f3 f4 f5".split(),
                         [1,3,"h","e",True],

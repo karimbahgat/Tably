@@ -246,6 +246,8 @@ class Table:
 
     def iter_select(self, query):
         "return a generator of True False for each row's query result"
+        # Maybe should return rows instead, or at least need another
+        # ...function for that
 
         if hasattr(query, "__call__"):
             # iterate function results
@@ -253,10 +255,36 @@ class Table:
                 result = query(row)
                 yield result
                 
-        elif isinstance(query, (str,unicode)): 
+        elif isinstance(query, (str,unicode)):
+            
+            # get list of field names mentioned in query    
+            # TODO: send this part to separate queryparser module to detect varnames
+            # ...it can also take an sql expression and convert each node to equivalent python
+            # ALSO, MAYBE LOOK FOR SAFETY LOOPHOLES
+            # http://nedbatchelder.com/blog/201206/eval_really_is_dangerous.html
+            import ast
+            fieldnames = []
+            for node in ast.walk(ast.parse(query, "<string>", "eval")):
+                if isinstance(node, ast.Name):
+                    try: eval(node.id) # if no error, is builtin name
+                    except NameError: # if name error, must be field name
+                        fieldnames.append(node.id)
+                        
+            # define some builtins that the user can use
+            import random, math
+            vardict = dict(random=random, math=math)
+            
+            # loop rows
+            # (2x faster to only loop the relevant columns, since avoids field loopup for each row,
+            # ...but not worth it, less understandable, and creates another gateway
+            # ...to data values/labels that has to be maintained)
+            prepped = compile(query, "<string>", "eval")
             for row in self:
+                # build fieldname-value dict
+                rowvalues = [row[field] for field in fieldnames]
+                vardict.update(zip(fieldnames, rowvalues))
                 # run and retrieve query value
-                yield eval(query)
+                yield eval(prepped, {}, vardict)#
 
         else:
             raise Exception("The 'query' argument must either be a query string or a function")
