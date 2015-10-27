@@ -4,9 +4,10 @@ import tably
 # iter select speedtest
 import time
 virtual = [ ["f%i"%i for i in range(100)] ]
+virtual.extend( [range(100) for _ in range(1000)] )
 data = tably.load(data=virtual)
 t = time.time()
-import random
+list(data.iter_select("f11 + float(f55) < 50"))
 print time.time() - t
 
 fdsfsd

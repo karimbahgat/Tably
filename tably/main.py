@@ -3,6 +3,9 @@ import urllib
 import re
 import datetime
 
+import random
+import math
+
 from __builtin__ import __dict__ as BUILTINS
 
 from . import loader
@@ -245,7 +248,13 @@ class Table:
     ###### SELECT #######
 
     def iter_select(self, query):
-        "return a generator of True False for each row's query result"
+        """
+        Returns rows where query returns True.
+        Query can be a function that takes a single row argument
+        and returns True or False.
+        Or it can be a Python expression where the value of a field
+        is referenced as an ordinary Python variable. 
+        """
         # Maybe should return rows instead, or at least need another
         # ...function for that
 
@@ -253,7 +262,8 @@ class Table:
             # iterate function results
             for row in self:
                 result = query(row)
-                yield result
+                if result:
+                    yield row
                 
         elif isinstance(query, (str,unicode)):
             
@@ -284,23 +294,29 @@ class Table:
                 rowvalues = [row[field] for field in fieldnames]
                 vardict.update(zip(fieldnames, rowvalues))
                 # run and retrieve query value
-                yield eval(prepped, {}, vardict)#
+                result = eval(prepped, {}, vardict)
+                if result:
+                    yield row
 
         else:
             raise Exception("The 'query' argument must either be a query string or a function")
 
     def select(self, query):
         outtable = self.copy(copyrows=False)
-        for row,keep in itertools.izip(self,self.iter_select(query)):
-            if keep:
-                outtable.add_row(row)
+        for row in self.iter_select(query):
+            outtable.add_row(row)
         return outtable
 
     def exclude(self, query):
         outtable = self.copy(copyrows=False)
-        for row,drop in itertools.izip(self,self.iter_select(query)):
-            if not drop:
-                outtable.add_row(row)
+        # invert query
+        if hasattr(query, "__call__"):
+            query = lambda row: not query(row)
+        else:
+            query = "not (%s)" % query
+        # run
+        for row in self.iter_select(query):
+            outtable.add_row(row)
         return outtable
 
 ##    def find(self, query):
