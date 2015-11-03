@@ -10,8 +10,6 @@ import operator
 
 # CLASSES
 
-CODEC = "utf8"
-
 
 
 
@@ -81,8 +79,6 @@ def detect_missing(value):
     elif not value and value != 0:
         return True
 
-
-
 def isint(x):
     try:
         conv = float(x)
@@ -120,12 +116,12 @@ def forcefloat(x):
         if detect_missing(x): return MISSING
         raise ValueError("Could not force value to type float")
 
-def forcetext(x):
+def forcetext(x, encoding):
     if detect_missing(x): 
         # is missing value
         return MISSING
     try:
-        return unicode(x, CODEC)
+        return unicode(x, encoding)
     except (ValueError, TypeError):
         if isinstance(x, unicode):
             # value is already unicode
@@ -141,11 +137,11 @@ COLUMNTYPES_FORCE = dict([("datetime", datetime.datetime),
                     ("text", forcetext),
                     ("flexi", lambda x: x)])
 
-
 class Column:
-    def __init__(self, name, values=[], label="", type=None, value_labels=dict()):
-        self.name = forcetext(name)
-        self.label = forcetext(label)
+    def __init__(self, name, values=[], label="", type=None, value_labels=dict(), encoding="utf8"):
+        self.encoding = encoding
+        self.name = forcetext(name, encoding=self.encoding)
+        self.label = forcetext(label, encoding=self.encoding)
         if not isinstance(values, list): raise Exception("values argument must be a list of lists")
         self.values = values
         if not isinstance(value_labels, dict): raise Exception("value_labels argument must be a dictionary")
@@ -166,16 +162,17 @@ class Column:
         uniqvalues = list(unicode(value)[:50] for value in sorted(set(self)))
         if len(uniqvalues) > 30:
             uniqvalues = uniqvalues[:30]
-            uniqvalues.append("...")
-        return "Field '%s':"%self.name + \
+            uniqvalues.append(u"...")
+        text = "Field '%s':"%self.name + \
                "\n  Description: '%s'"%self.label + \
                "\n  Data type: %s"%self.type + \
                "\n  Unique values:" + \
                "\n    " + "\n    ".join(uniqvalues) + \
                "\n"
+        return text
 
     def __str__(self):
-        return self.__unicode__().encode(sys.stdout.encoding)
+        return self.__unicode__().encode(self.encoding)
 
     def __iter__(self):
         for i in xrange(len(self)):
@@ -196,7 +193,9 @@ class Column:
         if detect_missing(value):
             self.values[i] = value
         else:
-            convertfunc = COLUMNTYPES_FORCE[self.type]
+            if self.type == "text":
+                convertfunc = lambda x: COLUMNTYPES_FORCE[self.type](x, encoding=self.encoding)
+            else: convertfunc = COLUMNTYPES_FORCE[self.type]
             self.values[i] = convertfunc(value)
 
     def __add__(self, other):
@@ -319,7 +318,9 @@ class Column:
 
     def convert_type(self, type):
         # convert all values
-        convertfunc = COLUMNTYPES_FORCE[type]
+        if type == "text":
+            convertfunc = lambda x: COLUMNTYPES_FORCE[type](x, encoding=self.encoding)
+        else: convertfunc = COLUMNTYPES_FORCE[type]
         for i,value in enumerate(self.values):
             if value == MISSING:
                 continue
@@ -376,7 +377,7 @@ class ColumnMapper:
                "\n"
 
     def __str__(self):
-        return self.__unicode__().encode(sys.stdout.encoding)
+        return self.__unicode__().encode(self.columns[0].encoding)
 
     def __iter__(self):
         for col in self.columns:
@@ -475,7 +476,7 @@ class Row:
                "\n"
 
     def __str__(self):
-        return self.__unicode__().encode(sys.stdout.encoding)
+        return self.__unicode__().encode(self.columnmapper.columns[0].encoding)
 
     def __iter__(self):
         for i in xrange(len(self)):
@@ -563,7 +564,7 @@ class RowMapper:
                "\n"
 
     def __str__(self):
-        return self.__unicode__().encode(sys.stdout.encoding)
+        return self.__unicode__().encode(self.columnmapper[0].encoding)
 
     def __iter__(self):
         for i in xrange(len(self)):
@@ -619,14 +620,14 @@ class RowMapper:
 
 # FUNCTIONS
 
-def build_table(table, fieldtuples, rows, name=None):
+def build_table(table, fieldtuples, rows, name=None, encoding="utf8"):
 
     values_bycolumn = itertools.izip_longest(*rows)
     columns = []
     for i,(fieldtuple,values) in enumerate(itertools.izip_longest(fieldtuples,values_bycolumn)):
         values = list(values)
         fieldname,label,type,value_labels = fieldtuple
-        col = Column(fieldname,values,label,type,value_labels)
+        col = Column(fieldname,values,label,type,value_labels,encoding=encoding)
         columns.append(col)
         
     columnmapper = ColumnMapper(columns)

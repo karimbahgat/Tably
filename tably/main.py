@@ -17,7 +17,8 @@ from . import gui
 
 
 class Table:
-    def __init__(self, filepath=None, xlsheetname=None, data=None, name=None):
+    def __init__(self, filepath=None, xlsheetname=None, data=None, name=None, encoding="utf8"):
+        self.encoding = encoding
         if filepath:
             fieldtuples,rows = loader.from_file(filepath, xlsheetname=xlsheetname)
         elif data:
@@ -25,7 +26,7 @@ class Table:
         else:
             fieldtuples,rows = [],[]
             
-        self = builder.build_table(self, fieldtuples, rows, name)
+        self = builder.build_table(self, fieldtuples, rows, name, encoding=encoding)
 
     def __len__(self):
         return self.height
@@ -34,11 +35,11 @@ class Table:
         return "\n".join([ "Table instance: %s" % self.name,
                            "Width: %s" % self.width,
                            "Height: %s" % self.height,
-                           unicode(self.fields)[:-1],
-                           unicode(self.rows) ])
+                           self.fields.__unicode__()[:-1],
+                           self.rows.__unicode__() ])
 
     def __str__(self):
-        return self.__unicode__().encode(sys.stdout.encoding)
+        return self.__unicode__().encode(self.encoding)
 
     def __iter__(self):
         for row in self.rows:
@@ -91,9 +92,8 @@ class Table:
 
     ###### GENERAL #######
 
-    def save(self, savepath, **kwargs):
-        if not kwargs.get("encoding"): kwargs["encoding"] = builder.CODEC
-        saver.to_file(self, savepath, **kwargs)
+    def save(self, savepath, encoding="utf8", **kwargs):
+        saver.to_file(self, savepath, encoding=encoding, **kwargs)
 
     def view(self):
         rows, fields = self.to_list()
@@ -191,6 +191,7 @@ class Table:
             # note: all new fields are created empty
             kwargs["values"] = [builder.MISSING for _ in xrange(len(self))]
             if not kwargs.get("type"): kwargs["type"] = "flexi"
+            kwargs["encoding"] = self.encoding
             column = builder.Column(**kwargs)
         self.fields.columns.append(column)
         builder.update_fields(self, self.fields.columns)
@@ -247,6 +248,31 @@ class Table:
 
     ###### SELECT #######
 
+    def _prep_eval(self, query):
+        # get list of field names mentioned in query    
+        # TODO: send this part to separate queryparser module to detect varnames
+        # ...it can also take an sql expression and convert each node to equivalent python
+        # ALSO, MAYBE LOOK FOR SAFETY LOOPHOLES
+        # http://nedbatchelder.com/blog/201206/eval_really_is_dangerous.html
+        import ast
+        fieldnames = []
+        for node in ast.walk(ast.parse(query, "<string>", "eval")):
+            if isinstance(node, ast.Name):
+                try: eval(node.id) # if no error, is builtin name
+                except NameError: # if name error, must be field name
+                    fieldnames.append(node.id)
+                    
+        # define some builtins that the user can use
+        import random, math, datetime
+        vardict = dict(random=random, math=math, datetime=datetime)
+        
+        # loop rows
+        # (2x faster to only loop the relevant columns, since avoids field loopup for each row,
+        # ...but not worth it, less understandable, and creates another gateway
+        # ...to data values/labels that has to be maintained)
+        prepped = compile(query, "<string>", "eval")
+        return fieldnames,vardict,prepped
+    
     def iter_select(self, query):
         """
         Returns rows where query returns True.
@@ -267,28 +293,7 @@ class Table:
                 
         elif isinstance(query, (str,unicode)):
             
-            # get list of field names mentioned in query    
-            # TODO: send this part to separate queryparser module to detect varnames
-            # ...it can also take an sql expression and convert each node to equivalent python
-            # ALSO, MAYBE LOOK FOR SAFETY LOOPHOLES
-            # http://nedbatchelder.com/blog/201206/eval_really_is_dangerous.html
-            import ast
-            fieldnames = []
-            for node in ast.walk(ast.parse(query, "<string>", "eval")):
-                if isinstance(node, ast.Name):
-                    try: eval(node.id) # if no error, is builtin name
-                    except NameError: # if name error, must be field name
-                        fieldnames.append(node.id)
-                        
-            # define some builtins that the user can use
-            import random, math
-            vardict = dict(random=random, math=math)
-            
-            # loop rows
-            # (2x faster to only loop the relevant columns, since avoids field loopup for each row,
-            # ...but not worth it, less understandable, and creates another gateway
-            # ...to data values/labels that has to be maintained)
-            prepped = compile(query, "<string>", "eval")
+            fieldnames,vardict,prepped = self._prep_eval(query)
             for row in self:
                 # build fieldname-value dict
                 rowvalues = [row[field] for field in fieldnames]
@@ -429,8 +434,13 @@ class Table:
                 row[fieldname] = expression(row)
 
         elif isinstance(expression, (str,unicode)):
+            fieldnames,vardict,prepped = self._prep_eval(expression)
             for row in self:
-                row[fieldname] = eval(expression)
+                # build fieldname-value dict
+                rowvalues = [row[field] for field in fieldnames]
+                vardict.update(zip(fieldnames, rowvalues))
+                # run and retrieve query value
+                row[fieldname] = eval(prepped, {}, vardict)
         
         return self
 
@@ -567,23 +577,16 @@ class Table:
         or that builds a dictionary with at least a year entry"""
         self.starttime_expr = starttime_expr
         self.endtime_expr = endtime_expr
-        # crunch the numbers
-        startexpr = "result = %s" % self.starttime_expr
-        if self.endtime_expr: endexpr = "result = %s" % self.endtime_expr
+        fieldnames1,vardict1,prepped1 = self._prep_eval(starttime_expr)
+        if endtime_expr:
+            fieldnames2,vardict2,prepped2 = self._prep_eval(endtime_expr)
+        
         for row in self:
-            # make fields into vars
-            for field in self.fields:
-                value = row[self.fields.index(field)]
-                if isinstance(value, (unicode,str)):
-                    value = '"""'+str(value).replace('"',"'")+'"""'
-                elif isinstance(value, (int,float)):
-                    value = str(value)
-                elif isinstance(value, (datetime.datetime)):
-                    value = str(value)
-                code = "%s = %s"%(field,value)
-                exec(code)
+            # build fieldname-value dict
+            rowvalues = [row[field] for field in fieldnames1]
+            vardict1.update(zip(fieldnames1, rowvalues))
             # run and retrieve startexpr value
-            exec(startexpr)
+            result = eval(prepped1, {}, vardict1)
             if isinstance(result, datetime.datetime): pass
             elif isinstance(result, dict):
                 if result.get("year") == None: raise Exception("the dictionary time needs at least a year entry")
@@ -594,7 +597,11 @@ class Table:
             row.time = result
             # run and retrieve endexpr value
             if self.endtime_expr:
-                exec(endexpr)
+                # build fieldname-value dict
+                rowvalues = [row[field] for field in fieldnames2]
+                vardict2.update(zip(fieldnames2, rowvalues))
+                # run and retrieve startexpr value
+                result = eval(prepped2, {}, vardict2)
                 if isinstance(result, datetime.datetime): pass
                 elif isinstance(result, dict):
                     if result.get("year") == None: raise Exception("the dictionary time needs at least a year entry")
@@ -629,8 +636,8 @@ class Table:
 def new():
     return Table()
 
-def load(filepath=None, xlsheetname=None, data=None, name=None):
-    return Table(filepath, xlsheetname, data, name)
+def load(filepath=None, xlsheetname=None, data=None, name=None, encoding="utf8"):
+    return Table(filepath, xlsheetname, data, name, encoding=encoding)
 
 def web_load(urlpath, savefolder=None, xlsheetname=None, name=None):
     # save to temp location in current dir
