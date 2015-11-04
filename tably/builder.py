@@ -130,7 +130,18 @@ def forcetext(x, encoding):
             # cannot be converted with a codec, ie int or float
             return unicode(x)
 
-COLUMNTYPES_FORCE = dict([("datetime", datetime.datetime),
+def forcedate(x):
+    if detect_missing(x): 
+        # is missing value
+        return MISSING
+    if isinstance(x,datetime.datetime):
+        return x
+    elif isinstance(x,dict):
+        return datetime.datetime(**x)
+    # maybe also detect from string using dateutils...
+    # ...
+
+COLUMNTYPES_FORCE = dict([("datetime", forcedate),
                     ("integer", forceint),
                     ("float", forcefloat),
                     ("boolean", bool),
