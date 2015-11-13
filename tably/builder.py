@@ -83,7 +83,7 @@ def isint(x):
     try:
         conv = float(x)
         return conv.is_integer()
-    except ValueError:
+    except (ValueError,TypeError):
         if detect_missing(x): return True
         return False
 
@@ -91,7 +91,7 @@ def isfloat(x):
     try:
         float(x)
         return True
-    except ValueError:
+    except (ValueError,TypeError):
         if detect_missing(x): return True
         return False
 
@@ -105,14 +105,14 @@ COLUMNTYPES_TEST = dict([("datetime", lambda x: isinstance(x,datetime.datetime) 
 def forceint(x):
     try:
         return int(x)
-    except ValueError:
+    except (ValueError,TypeError):
         if detect_missing(x): return MISSING
         raise ValueError("Could not force value to type int")
 
 def forcefloat(x):
     try:
         return float(x)
-    except ValueError:
+    except (ValueError,TypeError):
         if detect_missing(x): return MISSING
         raise ValueError("Could not force value to type float")
 
