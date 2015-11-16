@@ -41,6 +41,10 @@ class MissingValue:
     def __len__(self):
         return 0
 
+    def __iter__(self):
+        while False:
+            yield None
+
     def __add__(self, other):
         return other
 
@@ -356,8 +360,8 @@ class Column:
             self.value_labels = dict()
 
     def edit(self, name=None, values=None, label=None, type=None, value_labels=None):
-        if name: self.name = forcetext(name)
-        if label: self.label = forcetext(label)
+        if name: self.name = forcetext(name, encoding=self.encoding)
+        if label: self.label = forcetext(label, encoding=self.encoding)
         if values:
             if not isinstance(values, list): raise Exception("values argument must be a list of lists")
             self.values = values
@@ -397,9 +401,14 @@ class ColumnMapper:
     def __len__(self):
         return len(self.columns)
 
+    def _names_match(self, name1, name2):
+        if name1.lower().replace(" ", "_") == name2.lower().replace(" ", "_"):
+            return True
+
     def __getitem__(self, i):
         # get either one or more column instances
         # based on either column positions or names
+            
         if isinstance(i, slice):
             start, stop, step = i.start, i.stop, i.step
             start_isfield = isinstance(start, (str,unicode))
@@ -408,14 +417,14 @@ class ColumnMapper:
             if start_isfield or stop_isfield:
                 if start_isfield:
                     for column in self.columns:
-                        if column.name == start:
+                        if self._names_match(column.name, start):
                             start = self.columns.index(column)
                             break
                     else: raise Exception("Could not find field name %s" %start)
                         
                 if stop_isfield:
                     for column in self.columns:
-                        if column.name == stop:
+                        if self._names_match(column.name, stop):
                             stop = self.columns.index(column) + 1
                             break
                     else: raise Exception("Could not find field name %s" %stop)
@@ -429,7 +438,7 @@ class ColumnMapper:
         else:
             if isinstance(i, (str,unicode)):
                 for column in self.columns:
-                    if column.name == i:
+                    if self._names_match(column.name, i):
                         i = self.columns.index(column)
                         break
                 else: raise Exception("Could not find field name %s" %i)
@@ -445,8 +454,8 @@ class ColumnMapper:
 
         if isinstance(i, (str,unicode)):
             # create new field if fieldname doesnt already exist
-            fieldnames = (field.name for field in self)
-            if i not in fieldnames:
+            anymatch = any((self._names_match(i, field.name) for field in self))
+            if not anymatch:
                 if len(self.columns) > 0:
                     length = len(self.columns[0])
                 else: length = 0
@@ -615,8 +624,7 @@ class RowMapper:
         if direction == "down": reverse = False
         elif direction == "up": reverse = True
         else: raise Exception("direction must be either 'down' or 'up'")
-        colnames = [col.name for col in self.columnmapper.columns]
-        sortfieldindexes = [colnames.index(field) for field in sortfields]
+        sortfieldindexes = [self.columnmapper[field].i for field in sortfields]
         results = list(sorted(self, key=operator.itemgetter(*sortfieldindexes), reverse=reverse ))
         for col in self.columnmapper.columns:
             col.values = [col.values[row.i] for row in results]

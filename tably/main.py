@@ -248,19 +248,31 @@ class Table:
 
     ###### SELECT #######
 
-    def _prep_eval(self, query):
+    def _prep_select_eval(self, query):
         # get list of field names mentioned in query    
         # TODO: send this part to separate queryparser module to detect varnames
         # ...it can also take an sql expression and convert each node to equivalent python
         # ALSO, MAYBE LOOK FOR SAFETY LOOPHOLES
         # http://nedbatchelder.com/blog/201206/eval_really_is_dangerous.html
         import ast
-        fieldnames = []
-        for node in ast.walk(ast.parse(query, "<string>", "eval")):
-            if isinstance(node, ast.Name):
-                try: eval(node.id) # if no error, is builtin name
-                except NameError: # if name error, must be field name
-                    fieldnames.append(node.id)
+
+        # put entire query on one line in case it had triplequotes with multilines
+        query = " ".join([qline.strip() for qline in query.splitlines() if qline])
+
+        # replace each fieldname reference with row['fieldname']
+        namenodes = (node for node in ast.walk(ast.parse(query, "<string>", "eval"))
+                     if isinstance(node, ast.Name))
+        for node in sorted(namenodes,
+                           key=lambda n: n.col_offset,
+                           reverse=True):
+            try:
+                eval(node.id) # if no error, is builtin name
+                
+            except NameError: # if name error, must be field name
+                replacetext = "row['%s']" % node.id
+                replacestart = node.col_offset
+                replaceend = replacestart + len(node.id)
+                query = query[:replacestart] + replacetext + query[replaceend:]
                     
         # define some builtins that the user can use
         import random, math, datetime
@@ -271,7 +283,7 @@ class Table:
         # ...but not worth it, less understandable, and creates another gateway
         # ...to data values/labels that has to be maintained)
         prepped = compile(query, "<string>", "eval")
-        return fieldnames,vardict,prepped
+        return prepped,vardict
     
     def iter_select(self, query):
         """
@@ -293,11 +305,10 @@ class Table:
                 
         elif isinstance(query, (str,unicode)):
             
-            fieldnames,vardict,prepped = self._prep_eval(query)
+            prepped,vardict = self._prep_select_eval(query)
             for row in self:
-                # build fieldname-value dict
-                rowvalues = [row[field] for field in fieldnames]
-                vardict.update(zip(fieldnames, rowvalues))
+                # make row available in query
+                vardict.update(row=row)
                 # run and retrieve query value
                 result = eval(prepped, {}, vardict)
                 if result:
@@ -434,11 +445,10 @@ class Table:
                 row[fieldname] = expression(row)
 
         elif isinstance(expression, (str,unicode)):
-            fieldnames,vardict,prepped = self._prep_eval(expression)
+            prepped,vardict = self._prep_select_eval(expression)
             for row in self:
-                # build fieldname-value dict
-                rowvalues = [row[field] for field in fieldnames]
-                vardict.update(zip(fieldnames, rowvalues))
+                # make row available in query
+                vardict.update(row=row)
                 # run and retrieve query value
                 row[fieldname] = eval(prepped, {}, vardict)
         
@@ -495,14 +505,64 @@ class Table:
 
     ###### CONNECT #######
 
-    def join(self, othertable, query, mergematches=False, fieldmapping=tuple(), keepall=True):
+    def _prep_join_eval(self, query):
+        # get list of field names mentioned in query    
+        # TODO: send this part to separate queryparser module to detect varnames
+        # ...it can also take an sql expression and convert each node to equivalent python
+        # ALSO, MAYBE LOOK FOR SAFETY LOOPHOLES
+        # http://nedbatchelder.com/blog/201206/eval_really_is_dangerous.html
+        import ast
+        
+        # put entire query on one line in case it had triplequotes with multilines
+        query = " ".join([qline.strip() for qline in query.splitlines() if qline])
 
+        # replace each table.fieldname reference with row1 or row2['fieldname']
+        attrnodes = (node for node in ast.walk(ast.parse(query, "<string>", "eval"))
+                     if isinstance(node, ast.Attribute) and isinstance(node.value, ast.Name) )
+        
+        for node in sorted(attrnodes,
+                           key=lambda n: n.col_offset,
+                           reverse=True):
+
+            attrcaller = node.value.id
+            
+            if attrcaller == "main":
+                replacetext = "row1['%s']" % node.attr
+            elif attrcaller == "other":
+                replacetext = "row2['%s']" % node.attr
+            else:
+                continue
+            
+            replacestart = node.col_offset
+            replaceend = replacestart + len(attrcaller) + len(".") + len(node.attr)
+            query = query[:replacestart] + replacetext + query[replaceend:]
+            
+        # define some builtins that the user can use
+        import random, math, datetime
+        vardict = dict(random=random, math=math, datetime=datetime)
+        
+        # loop rows
+        # (2x faster to only loop the relevant columns, since avoids field loopup for each row,
+        # ...but not worth it, less understandable, and creates another gateway
+        # ...to data values/labels that has to be maintained)
+        prepped = compile(query, "<string>", "eval")
+        return prepped,vardict
+
+    def join(self, othertable, query, mergematches=False, fieldmapping=tuple(), keepall=True, mainprefix="t1_", otherprefix="t2_", choosefunc=None):
+        """
+        - mainprefix: Prefix for the variables from the main table, defaults to None.
+        - otherprefix: Prefix for the variables from the other table, defaults to None.
+        - choosefunc: If there is more than one match, and not wanting to do a fieldmapping aggregation,
+            instead use a function for choosing which row to keep. 
+        """
+        # TODO: Allow query function in addition to just string
         output = self.copy(copyrows=False)
+        mainwidth,otherwidth = self.width,othertable.width
 
         # extend fieldnames
         for field in othertable.fields:
-            if field.name not in (f.name for f in output.fields):
-                output.add_field(name=field.name, label=field.label, type=field.type, value_labels=field.value_labels)
+            name = field.name
+            output.add_field(name=name, label=field.label, type=field.type, value_labels=field.value_labels)
 
 ##        # extend fieldnames
 ##        for field in othertable.fields:
@@ -515,32 +575,17 @@ class Table:
 ##            output.add_field(name=name, label=field.label, type=field.type, value_labels=field.value_labels)
 
         # prep twotable query string
-        preppedlist = []
-        queryitems = query.split()
-        for item in queryitems:
-            item = item.strip()
-            # treat any non-builtin names as a "table.fieldname" string
-            try: eval(item)
-            except SyntaxError: pass
-            except NameError:
-                if len(item.split(".")) != 2:
-                    raise Exception("fieldnames must be specified as either 'main' or 'other' followed by '.' and the fieldname")
-                table,field = item.split(".")
-                if table == "main":
-                    item = "row1['%s']" %field
-                elif table == "other":
-                    item = "row2['%s']" %field
-            preppedlist.append( item )
-        query = " ".join(preppedlist)
+        prepped,vardict = self._prep_join_eval(query)
             
         # loop rows
         for row1 in self:
             for row2 in othertable:
-                match = eval(query)
+                vardict.update(row1=row1, row2=row2)
+                match = eval(prepped, {}, vardict)
                 
                 if match:
-                    output.add_row(row1)
-                    output[-1].edit(row2)
+                    output.add_row(row1) # add main
+                    output[-1].edit(row2) # join the matched fields
                     if mergematches:
                         # many-to-one
                         pass
@@ -555,7 +600,15 @@ class Table:
         # aggregate based on fieldmapping
         if mergematches:
             # HOW TO AGGREGATE?
-            self.aggregate(groupfields=[], fieldmapping=fieldmapping)
+            output.aggregate(groupfields=[], fieldmapping=fieldmapping)
+
+        # rename fields if requested
+        if mainprefix:
+            for f in output.fields[:mainwidth]:
+                f.edit(name=mainprefix + f.name)
+        if otherprefix:
+            for f in output.fields[mainwidth:]:
+                f.edit(name=otherprefix + f.name)        
 
         # change self in-place
         self = output
@@ -674,12 +727,15 @@ def merge(*mergetables):
             if field.name not in (outfield.name for outfield in outfields):
                 outfields.append(field)
     for outfield in outfields:
-        outtable.add_field(name=outfield.name, type=outfield.type)
+        outtable.add_field(name=outfield.name, type="flexi")
     #add the rest of the tables
     for table in mergetables:
         for row in table:
             rowdict = row.dict
             outtable.add_row(rowdict)
+    #autodetect and set field types
+    for field in outtable.fields:
+        field.convert_type(field.detect_type())
     #return merged table
     return outtable
 
