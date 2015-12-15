@@ -38,6 +38,24 @@ class MissingValue:
     def __nonzero__(self):
         return False
 
+    def __gt__(self, other):
+        return False
+
+    def __ge__(self, other):
+        if other == self:
+            return True
+        else:
+            return False
+
+    def __lt__(self, other):
+        return True    
+
+    def __le__(self, other):
+        if other == self:
+            return False
+        else:
+            return True
+
     def __len__(self):
         return 0
 
@@ -108,8 +126,8 @@ COLUMNTYPES_TEST = dict([("datetime", lambda x: isinstance(x,datetime.datetime) 
 
 def forceint(x):
     try:
-        return int(x)
-    except (ValueError,TypeError):
+        return int(float(x))  # float in case is text
+    except (ValueError,TypeError) as err:
         if detect_missing(x): return MISSING
         raise ValueError("Could not force value to type int")
 

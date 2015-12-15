@@ -404,9 +404,12 @@ class Table:
             field = self.fields[fieldname]
             outtable.add_field(name=fieldname, type=field.type)
         if fieldmapping: 
-            for fieldname in aggfields:
+            for fieldname,aggtype in fieldmapping:
                 field = self.fields[fieldname]
-                outtable.add_field(name=fieldname, type=field.type)
+                if aggtype in ("average","stdev"):
+                    outtable.add_field(name=fieldname, type="float")
+                else:
+                    outtable.add_field(name=fieldname, type=field.type)
         
         # aggregate
         fieldindexes = [self.fields.columns.index(self[fieldname]) for fieldname in groupfields]
